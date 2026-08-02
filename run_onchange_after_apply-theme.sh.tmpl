@@ -13,8 +13,10 @@
 # settings.ini, qt5ct/qt6ct.conf, btop.conf): apply may reset a theme-owned line,
 # and this puts it back.
 #
-# renderers: {{ include "bootstrap/internal/theme/render.go" | sha256sum }}
-# palettes:  {{ include "bootstrap/internal/theme/palette.go" | sha256sum }}
+# The renderers live in hydra, a separate repo, so they cannot be hashed from
+# here — upgrading hydra does not re-trigger this. Run `theme apply` by hand
+# after an upgrade that changes output.
+#
 # evergreen: {{ include "dot_config/theme/themes/evergreen.json" | sha256sum }}
 # ice-blue:  {{ include "dot_config/theme/themes/ice-blue.json" | sha256sum }}
 # onedark:   {{ include "dot_config/theme/themes/onedark.json" | sha256sum }}

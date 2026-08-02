@@ -9,44 +9,36 @@ Source lives in `~/dotfiles` rather than chezmoi's default
 
 ## Install on a new machine
 
+This repo is data. The tool that consumes it is
+[hydra](https://github.com/jrdriscoll17/hydra):
+
 ```sh
 sudo pacman -S --needed go git
-git clone git@github.com:jrdriscoll17/dotfiles.git ~/dotfiles
-cd ~/dotfiles/bootstrap && make install
-setup
+go install github.com/jrdriscoll17/hydra@latest
+hydra init          # clones this repo, sets up chezmoi, links `theme`
+hydra               # choose components and install them
 ```
 
-`make install` produces `~/.local/bin/setup` and a `theme` symlink beside it.
-They are the same binary — `main()` dispatches on `argv[0]` — so the installer,
-the theme switcher and the theme-asset builder ship as one artefact. Quickshell's
-`ThemeState.qml` execs `theme data`, so that symlink needs to stay on PATH.
+hydra detects the host, lets you pick components, installs their packages, hands
+these configs to chezmoi, and runs the bootstrap nothing else tracks — tpm,
+fisher, lazy.nvim, Doom, the wallpapers clone, the theme assets. It installs
+chezmoi itself if absent.
 
-`setup` is the interactive installer (`bootstrap/`). It detects the host, lets
-you pick components, installs their packages, hands the configs to chezmoi, and
-runs the bootstrap that nothing else tracks — tpm, fisher, lazy.nvim, Doom, the
-wallpapers clone, the first theme render. It installs chezmoi itself if absent.
-
-It is re-runnable: everything is checked first, so a second run installs only
-what is missing and asks only about files that actually differ.
+Afterwards, to keep a machine current with changes made on another:
 
 ```sh
-setup          # interactive
-setup -plan    # report what would happen, change nothing
+hydra status   # what has drifted here; changes nothing
+hydra sync     # pull this repo and reapply
 ```
 
-**Components are opt-out.** Doom Emacs and Media are off by default; anything
-in the list can be deselected. Laptop-only and desktop-only components are
-filtered by whether a battery exists.
-
 **Conflicts are yours to resolve.** When a config already exists and differs
-from the repo, `setup` stops and offers, per file: show the diff, keep yours,
-back yours up then take the repo's, or overwrite. Answer once and it offers to
-apply the same choice to the rest. Backups land beside the original as
+from this repo, hydra offers, per file: show the diff, keep yours, back yours up
+then take the repo's, or overwrite. Backups land beside the original as
 `<name>.before-setup`.
 
 ### Doing it by hand
 
-`setup` only orchestrates; nothing stops you driving the pieces directly:
+hydra only orchestrates; nothing stops you driving the pieces directly:
 
 ```sh
 chezmoi init --source ~/dotfiles && chezmoi apply
@@ -98,9 +90,10 @@ enters git and switching themes produces no diffs.
 
 `run_onchange_after_apply-theme.sh.tmpl` rebuilds it after `chezmoi apply`,
 which is what keeps a fresh machine complete — `kitty.conf` has
-`include theme.conf` and errors outright if it is missing. The script re-runs
-whenever the switcher or a palette changes, tracked by content hashes embedded
-in its comments.
+`include theme.conf` and errors outright if it is missing. It re-runs whenever a
+palette changes, tracked by content hashes in its comments. The renderers
+themselves live in hydra and cannot be hashed from here, so run `theme apply` by
+hand after a hydra upgrade that changes output.
 
 A few files are *mutated* in place by the switcher rather than generated whole
 (`gtk-3.0/settings.ini`, `qt5ct/qt6ct.conf`, `btop.conf`), so they hold real
@@ -113,9 +106,10 @@ symlink. See `.chezmoiignore`, which explains each entry.
 
 ## The theme switcher
 
-`theme` is a Go binary (`bootstrap/render.go`, `palette.go`, `themecmd.go`),
-ported from what used to be `~/.config/theme/theme.py`. What remains under
-`~/.config/theme` is data: the palette JSONs and a README.
+`theme` is hydra under another name — the same binary, reached through a symlink
+that `hydra init` creates. It was ported from what used to be
+`~/.config/theme/theme.py`; what remains under `~/.config/theme` is data: the
+palette JSONs and a README.
 
 ```sh
 theme list           # show the themes and which one is live
@@ -142,7 +136,7 @@ higher-resolution source and none to a lower one.
 
 `~/.themes/Material-Black-*`, `~/.themes/Colloid-*` and
 `~/.local/share/icons/MB-*-Suru-GLOW` are referenced by every palette but are
-in no repo and no package — they are built, not stored. `setup` rebuilds them
+in no repo and no package — they are built, not stored. hydra rebuilds them
 from upstream in three steps:
 
 1. **Base pair** — a sparse clone of
@@ -163,11 +157,11 @@ the installed theme, so any build can seed the next one and the original does
 not have to stay on disk. That is why this machine has no upstream base left —
 the palettes were derived from each other.
 
-Step 3 is also available on its own, and is what `theme recolor` now runs:
+Step 3 is also available on its own, and is what `theme recolor` runs:
 
 ```sh
-setup recolor <base-variant> <#hex> <name>
-setup recolor Pistachio '#7fd8e8' IceBlue
+hydra recolor <base-variant> <#hex> <name>
+hydra recolor Pistachio '#7fd8e8' IceBlue
 ```
 
 This was `recolor.py`, alongside `theme.py`. Both are now Go, in the same
@@ -177,8 +171,8 @@ version skipped it silently when it wasn't. The port is verified equivalent:
 for the same base, colour and name it produces a byte-identical icon set
 (25,501 files) and pixel-identical GTK assets.
 
-Missing assets do not error, they just leave an unstyled desktop, so `setup`
-also reports them under system checks.
+Missing assets do not error, they just leave an unstyled desktop, so hydra also
+reports them under system checks.
 
 ## Known issue: kitty font-face leak
 
