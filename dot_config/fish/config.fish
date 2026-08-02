@@ -1,7 +1,15 @@
 # source /usr/share/cachyos-fish-config/cachyos-config.fish
 
 ## Source from conf.d before our fish config
-source /usr/share/cachyos-fish-config/conf.d/done.fish
+#
+# This comes from the cachyos-fish-config package, which is not a dependency of
+# fish — it lands only if fish was chosen at install time, and does not exist on
+# plain Arch at all. Guard it, or every login on a machine without it opens with
+# an error. `sudo pacman -S cachyos-fish-config` restores the `done` notifier on
+# CachyOS.
+if test -f /usr/share/cachyos-fish-config/conf.d/done.fish
+    source /usr/share/cachyos-fish-config/conf.d/done.fish
+end
 
 
 ## Set values
