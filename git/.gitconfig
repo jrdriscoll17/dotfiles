@@ -1,0 +1,5 @@
+[user]
+	email = jake@xcancer.us
+	name = Jake Driscoll
+[push]
+	autoSetupRemote = true

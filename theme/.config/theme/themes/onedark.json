@@ -1,0 +1,45 @@
+{
+  "name": "onedark",
+  "label": "One Dark",
+  "blurb": "Atom One Dark. Warm greys, cool blue accent.",
+  "wallpaper": "wallpaper.jpg",
+  "colors": {
+    "base": "#1e232a",
+    "dim": "#000000",
+    "surface": "#252b34",
+    "surfaceBright": "#2f3742",
+    "outline": "#3a424f",
+    "fg": "#abb2bf",
+    "fgDim": "#707885",
+    "fgFaint": "#4a515c",
+    "comment": "#828b9c",
+    "red": "#e06c75",
+    "green": "#98c379",
+    "yellow": "#e5c07b",
+    "blue": "#61afef",
+    "purple": "#c678dd",
+    "cyan": "#56b6c2",
+    "orange": "#d19a66",
+    "accent": "#61afef"
+  },
+  "term": {
+    "bg": "#000000",
+    "fg": "#abb2bf",
+    "cursor": "#ffcb6b",
+    "selectionBg": "#3e4451",
+    "black": "#1e2127",
+    "brightBlack": "#5c6370",
+    "white": "#828791",
+    "brightWhite": "#e6efff"
+  },
+  "gtk": {
+    "theme": "Material-Black-OneDark",
+    "icons": "MB-OneDark-Suru-GLOW",
+    "kvantum": "OneDark",
+    "gtk4": "Colloid-Dark"
+  },
+  "editors": {
+    "doom": "doom-one",
+    "nvim": "onedark"
+  }
+}

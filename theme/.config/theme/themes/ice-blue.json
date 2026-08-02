@@ -1,0 +1,45 @@
+{
+  "name": "ice-blue",
+  "label": "Ice Blue",
+  "blurb": "Cold sea and glacier tones pulled from the lava-coast wallpaper, with its ember accents kept for warnings.",
+  "wallpaper": "new_rock.jpg",
+  "colors": {
+    "base": "#0d1720",
+    "dim": "#08111a",
+    "surface": "#16232e",
+    "surfaceBright": "#1f303d",
+    "outline": "#2c4150",
+    "fg": "#c4d7e2",
+    "fgDim": "#8ba7b8",
+    "fgFaint": "#587082",
+    "comment": "#7d99aa",
+    "red": "#e5675f",
+    "green": "#6fc2a8",
+    "yellow": "#d8b070",
+    "blue": "#6fadc8",
+    "purple": "#9d92c9",
+    "cyan": "#7fd8e8",
+    "orange": "#e8925c",
+    "accent": "#7fd8e8"
+  },
+  "term": {
+    "bg": "#08111a",
+    "fg": "#c4d7e2",
+    "cursor": "#e8925c",
+    "selectionBg": "#25404f",
+    "black": "#0d1720",
+    "brightBlack": "#587082",
+    "white": "#a7bfcd",
+    "brightWhite": "#e2eef4"
+  },
+  "gtk": {
+    "theme": "Material-Black-IceBlue",
+    "icons": "MB-IceBlue-Suru-GLOW",
+    "kvantum": "IceBlue",
+    "gtk4": "Colloid-Teal-Dark-Nord"
+  },
+  "editors": {
+    "doom": "doom-iceblue",
+    "nvim": "nordfox"
+  }
+}

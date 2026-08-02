@@ -1,0 +1,302 @@
+-- ~/.config/hypr/hyprland.lua
+-- Migrated from hyprland.conf (hyprlang) on 2026-06-09.
+-- Hyprland 0.55 Lua config. See docs/plans/2026-06-09-hyprland-lua-migration.md
+
+------------------
+---- MONITORS ----
+------------------
+hl.monitor({ output = "DP-2", mode = "3840x2160@120", position = "0x0", scale = 2 })
+hl.monitor({ output = "DP-1", mode = "3840x2160@120", position = "1920x0", scale = 2 })
+hl.monitor({ output = "DP-3", mode = "3840x2160@120", position = "3840x0", scale = 2 })
+hl.monitor({ output = "HDMI-A-1", mode = "3840x2160@120", position = "-1920x0", scale = 2 })
+
+hl.workspace_rule({ workspace = "2", monitor = "DP-2" })
+hl.workspace_rule({ workspace = "1", monitor = "DP-1" })
+hl.workspace_rule({ workspace = "3", monitor = "DP-3" })
+hl.workspace_rule({ workspace = "10", monitor = "HDMI-A-1" })
+
+---------------------
+---- MY PROGRAMS ----
+---------------------
+local terminal = "kitty"
+local fileManager = "pcmanfm"
+local menu = "qs ipc call launcher toggle"
+local themePicker = "qs ipc call theme toggle"
+local browser = "brave --enable-features=UseOzonePlatform --ozone-platform=wayland --password-store=kwallet"
+local discord = "vesktop"
+local editor = "emacsclient -c -n -a \"\""
+
+-------------------
+---- AUTOSTART ----
+-------------------
+hl.on("hyprland.start", function()
+	-- Notifications are served by quickshell (qs.notifications); mako would
+	-- fight it for the org.freedesktop.Notifications bus name.
+	hl.exec_cmd("qs -d") -- quickshell: bar + app launcher (~/.config/quickshell)
+	hl.exec_cmd("udiskie")
+	hl.exec_cmd("hypridle")
+	hl.exec_cmd("hyprpaper")
+	-- Re-applies the active theme (~/.config/theme). Everything else reads its
+	-- own generated config file; window borders are the one thing that has to
+	-- be pushed in with hyprctl, so this runs at every start.
+	hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/theme apply --quiet")
+	hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
+	hl.exec_cmd("plex-mpv-shim")
+	hl.exec_cmd("systemctl --user import-environment")
+	hl.exec_cmd("dbus-update-activation-environment --systemd")
+end)
+
+-------------------------------
+---- ENVIRONMENT VARIABLES ----
+-------------------------------
+hl.env("XCURSOR_SIZE", "24")
+hl.env("HYPRCURSOR_SIZE", "24")
+hl.env("GDK_SCALE", "2")
+hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
+
+-----------------------
+---- LOOK AND FEEL ----
+-----------------------
+hl.config({
+	general = {
+		gaps_in = 5,
+		gaps_out = 10,
+		border_size = 2,
+		-- Startup defaults only: `theme apply` overwrites both from the active
+		-- palette a moment later (see AUTOSTART).
+		col = {
+			active_border = "rgba(61afefee)",
+			inactive_border = "rgba(282c34aa)",
+		},
+		resize_on_border = false,
+		allow_tearing = false,
+		layout = "master",
+	},
+	decoration = {
+		rounding = 10,
+		rounding_power = 2,
+		active_opacity = 1.0,
+		inactive_opacity = 1.0,
+		shadow = {
+			enabled = true,
+			range = 4,
+			render_power = 3,
+			color = "rgba(1a1a1aee)",
+		},
+		blur = {
+			enabled = true,
+			size = 20,
+			passes = 3,
+			vibrancy = 0.1696,
+		},
+	},
+	animations = { enabled = true },
+	misc = {
+		force_default_wallpaper = 0,
+		disable_hyprland_logo = true,
+	},
+	input = {
+		kb_layout = "us",
+		kb_variant = "",
+		kb_model = "",
+		kb_options = "",
+		kb_rules = "",
+		follow_mouse = 1,
+		sensitivity = 0,
+		touchpad = { natural_scroll = false },
+	},
+	xwayland = {
+		use_nearest_neighbor = false,
+		force_zero_scaling = true,
+	},
+})
+
+----------------------
+---- ANIMATIONS  -----
+----------------------
+hl.curve("easeOutQuint", { type = "bezier", points = { { 0.23, 1 }, { 0.32, 1 } } })
+hl.curve("easeInOutCubic", { type = "bezier", points = { { 0.65, 0.05 }, { 0.36, 1 } } })
+hl.curve("linear", { type = "bezier", points = { { 0, 0 }, { 1, 1 } } })
+hl.curve("almostLinear", { type = "bezier", points = { { 0.5, 0.5 }, { 0.75, 1.0 } } })
+hl.curve("quick", { type = "bezier", points = { { 0.15, 0 }, { 0.1, 1 } } })
+
+hl.animation({ leaf = "global", enabled = true, speed = 10, bezier = "default" })
+hl.animation({ leaf = "border", enabled = true, speed = 5.39, bezier = "easeOutQuint" })
+hl.animation({ leaf = "windows", enabled = true, speed = 4.79, bezier = "easeOutQuint" })
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 4.1, bezier = "easeOutQuint", style = "popin 87%" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.49, bezier = "linear", style = "popin 87%" })
+hl.animation({ leaf = "fadeIn", enabled = true, speed = 1.73, bezier = "almostLinear" })
+hl.animation({ leaf = "fadeOut", enabled = true, speed = 1.46, bezier = "almostLinear" })
+hl.animation({ leaf = "fade", enabled = true, speed = 3.03, bezier = "quick" })
+hl.animation({ leaf = "layers", enabled = true, speed = 3.81, bezier = "easeOutQuint" })
+hl.animation({ leaf = "layersIn", enabled = true, speed = 4, bezier = "easeOutQuint", style = "fade" })
+hl.animation({ leaf = "layersOut", enabled = true, speed = 1.5, bezier = "linear", style = "fade" })
+hl.animation({ leaf = "fadeLayersIn", enabled = true, speed = 1.79, bezier = "almostLinear" })
+hl.animation({ leaf = "fadeLayersOut", enabled = true, speed = 1.39, bezier = "almostLinear" })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
+hl.animation({ leaf = "workspacesIn", enabled = true, speed = 1.21, bezier = "almostLinear", style = "fade" })
+hl.animation({ leaf = "workspacesOut", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
+
+-------------------
+---- GAME MODE ----
+-------------------
+-- Toggle: middle monitor (DP-1) only @ 240Hz + HDR, side monitors off.
+-- Self-healing: reads current state in-process via hl.get_monitor.
+-- NOTE: must NOT shell out to `hyprctl` here — a synchronous IPC call from
+-- inside a bind callback deadlocks the compositor (it can't service the
+-- socket while blocked in this callback). hl.get_monitor is in-process.
+
+local function game_mode_is_on()
+	-- DP-2 is an enabled monitor only in normal mode; disabled (nil) => game mode.
+	return hl.get_monitor("DP-2") == nil
+end
+
+local function toggle_game_mode(hdr)
+	if game_mode_is_on() then
+		-- Restore normal 3-monitor SDR layout. Explicitly clear HDR on DP-1.
+		-- NOTE: disabled = false is REQUIRED. Re-issuing a monitor rule without it
+		-- merges with the prior `disabled = true` (from the ON branch) and the
+		-- monitor stays off — the rule's disabled flag is sticky. (verified 2026-06-09)
+		hl.monitor({ output = "DP-2", mode = "3840x2160@120", position = "0x0", scale = 2, disabled = false })
+		hl.monitor({
+			output = "DP-1",
+			mode = "3840x2160@120",
+			position = "1920x0",
+			scale = 2,
+			bitdepth = 8,
+			cm = "auto",
+			disabled = false,
+		})
+		hl.monitor({ output = "DP-3", mode = "3840x2160@120", position = "3840x0", scale = 2, disabled = false })
+		hl.notification.create({ text = "Game Mode OFF — 3 monitors · 120Hz", timeout = 4000 })
+	elseif hdr then
+		-- Game Mode ON: DP-1 only @ 240Hz + HDR (correct SDR luminance range), sides off.
+		hl.monitor({
+			output = "DP-1",
+			mode = "3840x2160@239.99",
+			position = "1920x0",
+			scale = 2,
+			bitdepth = 10,
+			cm = "hdr",
+			sdr_max_luminance = 203,
+			sdr_min_luminance = 0,
+			sdrbrightness = 1.3,
+			sdrsaturation = 1.3,
+		})
+		hl.monitor({ output = "DP-2", disabled = true })
+		hl.monitor({ output = "DP-3", disabled = true })
+		hl.notification.create({ text = "🎮 Game Mode ON — DP-1 @ 240Hz · HDR · sides off", timeout = 4000 })
+	else
+		-- Game Mode ON (SDR): DP-1 only @ 240Hz, no HDR, sides off.
+		hl.monitor({
+			output = "DP-1",
+			mode = "3840x2160@239.99",
+			position = "1920x0",
+			scale = 2,
+			bitdepth = 8,
+			cm = "auto",
+		})
+		hl.monitor({ output = "DP-2", disabled = true })
+		hl.monitor({ output = "DP-3", disabled = true })
+		hl.notification.create({ text = "🎮 Game Mode ON — DP-1 @ 240Hz · SDR · sides off", timeout = 4000 })
+	end
+end
+
+---------------------
+---- KEYBINDINGS ----
+---------------------
+local mainMod = "SUPER"
+
+hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
+hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(browser))
+hl.bind(mainMod .. " + D", hl.dsp.exec_cmd(discord))
+hl.bind(mainMod .. " + C", hl.dsp.exec_cmd(editor))
+hl.bind(mainMod .. " + SHIFT + D", hl.dsp.exec_cmd(menu))
+hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd(themePicker))
+hl.bind(mainMod .. " + SHIFT + N", hl.dsp.exec_cmd("qs ipc call notifications dismiss"))
+
+hl.bind(mainMod .. " + Q", hl.dsp.window.close())
+hl.bind(mainMod .. " + T", hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
+hl.bind(mainMod .. " + SHIFT + Q", hl.dsp.exit())
+
+-- F = maximize (keeps bar/gaps), SHIFT+F = true fullscreen
+hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }))
+hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "toggle" }))
+
+-- Toggle Game Mode (HDR), and SHIFT variant without HDR
+hl.bind(mainMod .. " + G", function()
+	toggle_game_mode(true)
+end)
+hl.bind(mainMod .. " + SHIFT + G", function()
+	toggle_game_mode(false)
+end)
+
+-- Move focus with mainMod + arrow keys
+hl.bind(mainMod .. " + left", hl.dsp.focus({ direction = "left" }))
+hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
+hl.bind(mainMod .. " + up", hl.dsp.focus({ direction = "up" }))
+hl.bind(mainMod .. " + down", hl.dsp.focus({ direction = "down" }))
+
+-- Workspaces: switch (on current monitor) + move-silent
+for i = 1, 10 do
+	local key = i % 10 -- 10 maps to key 0
+	hl.bind(mainMod .. " + " .. key, hl.dsp.focus({ workspace = i, on_current_monitor = true }))
+	hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i, follow = false }))
+end
+
+-- Scratchpad
+hl.bind(mainMod .. " + S", hl.dsp.workspace.toggle_special("magic"))
+hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:magic" }))
+
+-- Scroll through workspaces
+hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
+hl.bind(mainMod .. " + mouse_up", hl.dsp.focus({ workspace = "e-1" }))
+
+-- Move/resize with mouse
+hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true })
+hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
+
+-- Multimedia keys (locked = work on lockscreen, repeating = key-repeat)
+hl.bind(
+	"XF86AudioRaiseVolume",
+	hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"),
+	{ locked = true, repeating = true }
+)
+hl.bind(
+	"XF86AudioLowerVolume",
+	hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),
+	{ locked = true, repeating = true }
+)
+hl.bind(
+	"XF86AudioMute",
+	hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
+	{ locked = true, repeating = true }
+)
+hl.bind(
+	"XF86AudioMicMute",
+	hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),
+	{ locked = true, repeating = true }
+)
+
+-- Media control (playerctl)
+hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })
+hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
+
+--------------------------------
+---- WINDOWS AND WORKSPACES ----
+--------------------------------
+hl.window_rule({
+	name = "suppress-maximize",
+	match = { class = ".*" },
+	suppress_event = "maximize",
+})
+
+hl.window_rule({
+	name = "fix-xwayland-drags",
+	match = { class = "^$", title = "^$", xwayland = true, float = true, fullscreen = false, pin = false },
+	no_focus = true,
+})

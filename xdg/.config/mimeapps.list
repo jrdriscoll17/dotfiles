@@ -1,0 +1,9 @@
+[Default Applications]
+x-scheme-handler/discord=vesktop.desktop
+audio/vnd.wave=vlc.desktop
+x-scheme-handler/discord-1345366770436800533=discord-1345366770436800533.desktop
+x-scheme-handler/fdm=freedownloadmanager_fdm_up.desktop
+x-scheme-handler/claude-cli=claude-code-url-handler.desktop
+
+[Added Associations]
+audio/vnd.wave=vlc.desktop;

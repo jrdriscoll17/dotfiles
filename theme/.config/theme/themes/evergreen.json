@@ -1,0 +1,45 @@
+{
+  "name": "evergreen",
+  "label": "Evergreen",
+  "blurb": "Everforest-derived. Soft moss and bark, warm off-white text, low-glare surfaces.",
+  "wallpaper": "forest_mist.jpg",
+  "colors": {
+    "base": "#2d353b",
+    "dim": "#232a2e",
+    "surface": "#343f44",
+    "surfaceBright": "#3d484d",
+    "outline": "#4f585e",
+    "fg": "#d3c6aa",
+    "fgDim": "#9da9a0",
+    "fgFaint": "#7a8478",
+    "comment": "#93a08f",
+    "red": "#e67e80",
+    "green": "#a7c080",
+    "yellow": "#dbbc7f",
+    "blue": "#7fbbb3",
+    "purple": "#d699b6",
+    "cyan": "#83c092",
+    "orange": "#e69875",
+    "accent": "#a7c080"
+  },
+  "term": {
+    "bg": "#232a2e",
+    "fg": "#d3c6aa",
+    "cursor": "#dbbc7f",
+    "selectionBg": "#475258",
+    "black": "#2d353b",
+    "brightBlack": "#7a8478",
+    "white": "#c0b498",
+    "brightWhite": "#e8dfc7"
+  },
+  "gtk": {
+    "theme": "Material-Black-Evergreen",
+    "icons": "MB-Evergreen-Suru-GLOW",
+    "kvantum": "Evergreen",
+    "gtk4": "Colloid-Green-Dark-Everforest"
+  },
+  "editors": {
+    "doom": "doom-evergreen",
+    "nvim": "everforest"
+  }
+}
