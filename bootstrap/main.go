@@ -1,497 +1,71 @@
-// Command setup is the interactive installer for this machine: it picks the
-// components you want, installs their packages, hands the config files to
-// chezmoi, and runs the bootstrap that nothing else tracks (tpm, fisher, lazy,
-// Doom, the theme render).
+// Command setup installs and maintains this machine: it picks the components
+// you want, installs their packages, hands the config files to chezmoi, and
+// runs the bootstrap that nothing else tracks (tpm, fisher, lazy, Doom, the
+// theme assets).
 //
-// It is deliberately re-runnable. Everything it does is checked first, so a
-// second run installs only what is missing and asks only about files that
-// actually differ.
+// It is a multi-call binary. Installed as ~/.local/bin/setup with a `theme`
+// symlink beside it, the same executable is also the theme switcher, so the
+// installer, the switcher and the theme-asset builder ship as one artefact.
+//
+//	setup                 interactive installer
+//	setup -plan           report what would happen, change nothing
+//	setup recolor …       build a Material-Black + Suru-GLOW pair
+//	theme … (or setup theme …)   the theme switcher
+//
+// It is deliberately re-runnable: everything is checked first, so a second run
+// installs only what is missing and asks only about files that actually differ.
 package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
-)
 
-// planOnly reports what the default selection would do and exits, without
-// prompting or changing anything. Useful for checking state over ssh or in a
-// scrollback, where a full-screen TUI is a nuisance.
-var planOnly = flag.Bool("plan", false, "print what would happen, change nothing")
-
-var (
-	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
-	okStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	warnStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	errStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	dimStyle   = lipgloss.NewStyle().Faint(true)
-)
-
-// Resolution is what to do about a config file that already exists and differs.
-type Resolution string
-
-const (
-	Overwrite Resolution = "overwrite"
-	BackupTo  Resolution = "backup"
-	Keep      Resolution = "keep"
-	ShowDiff  Resolution = "diff"
+	"github.com/jrdriscoll17/dotfiles/bootstrap/internal/recolor"
+	"github.com/jrdriscoll17/dotfiles/bootstrap/internal/setup"
+	"github.com/jrdriscoll17/dotfiles/bootstrap/internal/theme"
 )
 
 func main() {
-	// Multi-call binary: installed as ~/.local/bin/setup with a `theme` symlink
-	// beside it. Invoked through that name it is the theme switcher, so the
-	// renderers, the palettes and the installer that builds their assets all
-	// ship as one binary.
+	// Dispatch on argv[0] first: invoked through the `theme` symlink this is
+	// the switcher, not the installer.
 	if filepath.Base(os.Args[0]) == "theme" {
-		themeExit(ThemeMain(os.Args[1:]))
-	}
-	if len(os.Args) > 1 && os.Args[1] == "theme" {
-		themeExit(ThemeMain(os.Args[2:]))
+		exit("theme", theme.Main(os.Args[1:]))
 	}
 
-	// `setup recolor <base> <#hex> <name>` builds a Material-Black + Suru-GLOW
-	// pair without going near the TUI, so it can be scripted.
-	if len(os.Args) > 1 && os.Args[1] == "recolor" {
-		if len(os.Args) != 5 {
-			fmt.Fprintln(os.Stderr, "usage: setup recolor <base-variant> <#hex> <name>")
-			os.Exit(2)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "theme":
+			exit("theme", theme.Main(os.Args[2:]))
+		case "recolor":
+			if len(os.Args) != 5 {
+				fmt.Fprintln(os.Stderr, "usage: setup recolor <base-variant> <#hex> <name>")
+				os.Exit(2)
+			}
+			exit("recolor", recolor.Run(os.Args[2], os.Args[3], os.Args[4]))
 		}
-		if err := Recolor(os.Args[2], os.Args[3], os.Args[4]); err != nil {
-			fmt.Fprintln(os.Stderr, errStyle.Render("recolor: "+err.Error()))
-			os.Exit(1)
-		}
-		return
 	}
 
-	flag.Parse()
-	if err := runSetup(); err != nil {
+	if err := setup.Run(); err != nil {
+		// A cancelled prompt is a normal way to leave the TUI, not a failure.
 		if errors.Is(err, huh.ErrUserAborted) {
-			fmt.Println(dimStyle.Render("\naborted — nothing was changed"))
+			fmt.Println("\naborted — nothing was changed")
 			os.Exit(0)
 		}
-		fmt.Fprintln(os.Stderr, errStyle.Render("error: "+err.Error()))
+		fmt.Fprintln(os.Stderr, "setup: "+err.Error())
 		os.Exit(1)
 	}
 }
 
-// themeExit ends the process after a `theme` invocation, mirroring how the
-// Python CLI reported failures.
-func themeExit(err error) {
+// exit ends the process after a subcommand, reporting failures the way that
+// command's users expect.
+func exit(name string, err error) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "theme: "+err.Error())
+		fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
 		os.Exit(1)
 	}
 	os.Exit(0)
-}
-
-func runSetup() error {
-	fmt.Println(titleStyle.Render("  system setup"))
-	fmt.Println(dimStyle.Render(fmt.Sprintf("  %s · %s\n", hostname(), archLabel())))
-
-	if *planOnly {
-		if !chezmoiReady() {
-			return errors.New("chezmoi is not installed; run without -plan to install it")
-		}
-	} else if err := preflight(); err != nil {
-		return err
-	}
-
-	laptop := isLaptop()
-	available := forHost(catalog(), laptop)
-
-	var selected []Component
-	var err error
-	if *planOnly {
-		selected = defaults(available)
-	} else if selected, err = chooseComponents(available, laptop); err != nil {
-		return err
-	}
-	if len(selected) == 0 {
-		fmt.Println(dimStyle.Render("nothing selected — done"))
-		return nil
-	}
-
-	// -- work out what actually needs doing -------------------------------
-	var pacman, aur, paths []string
-	for _, c := range selected {
-		pacman = append(pacman, missing(c.Packages)...)
-		aur = append(aur, missing(c.AUR)...)
-		paths = append(paths, c.Paths...)
-	}
-
-	states, err := scan(paths)
-	if err != nil {
-		return fmt.Errorf("reading chezmoi status: %w", err)
-	}
-
-	var conflicts, fresh []string
-	for p, s := range states {
-		switch s {
-		case StateConflict:
-			conflicts = append(conflicts, p)
-		case StateNew:
-			fresh = append(fresh, p)
-		}
-	}
-	sort.Strings(conflicts)
-	sort.Strings(fresh)
-
-	printPlan(selected, pacman, aur, fresh, conflicts)
-
-	if *planOnly {
-		printDetail("packages to install", append(pacman, aur...))
-		printDetail("files to create", fresh)
-		printDetail("files that differ (would prompt)", conflicts)
-		printDetail("bootstrap steps pending", pendingSteps(selected))
-		return nil
-	}
-
-	// -- decide what happens to each conflicting file ----------------------
-	decisions, err := resolveConflicts(conflicts)
-	if err != nil {
-		return err
-	}
-
-	apply, backups := partition(fresh, decisions)
-
-	var proceed bool
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().
-			Title("Apply this plan?").
-			Description(planSummary(pacman, aur, apply, backups)).
-			Affirmative("Install").
-			Negative("Cancel").
-			Value(&proceed),
-	)).Run(); err != nil {
-		return err
-	}
-	if !proceed {
-		fmt.Println(dimStyle.Render("cancelled — nothing was changed"))
-		return nil
-	}
-
-	return execute(selected, pacman, aur, apply, backups)
-}
-
-// preflight makes sure the things the installer itself needs are present.
-func preflight() error {
-	if !chezmoiReady() {
-		var install bool
-		if err := huh.NewForm(huh.NewGroup(
-			huh.NewConfirm().
-				Title("chezmoi is not installed").
-				Description("It places the config files. Install it to ~/.local/bin?").
-				Value(&install),
-		)).Run(); err != nil {
-			return err
-		}
-		if !install {
-			return errors.New("chezmoi is required to place configs")
-		}
-		if err := installChezmoi(); err != nil {
-			return fmt.Errorf("installing chezmoi: %w", err)
-		}
-	}
-
-	// A source dir that has never been initialised has no config file, so
-	// templates cannot render.
-	if _, err := capture("chezmoi", "source-path"); err != nil {
-		fmt.Println(dimStyle.Render("initialising chezmoi from ~/dotfiles..."))
-		if err := run("chezmoi", "init", "--source", inHome("dotfiles")); err != nil {
-			return fmt.Errorf("chezmoi init: %w", err)
-		}
-	}
-	return nil
-}
-
-func chooseComponents(available []Component, laptop bool) ([]Component, error) {
-	kind := "desktop"
-	if laptop {
-		kind = "laptop (battery detected)"
-	}
-
-	opts := make([]huh.Option[string], 0, len(available))
-	for _, c := range available {
-		label := fmt.Sprintf("%-20s %s", c.Name, dimStyle.Render(c.Desc))
-		opts = append(opts, huh.NewOption(label, c.Key).Selected(c.Default))
-	}
-
-	var keys []string
-	err := huh.NewForm(huh.NewGroup(
-		huh.NewMultiSelect[string]().
-			Title("What should this machine have?").
-			Description(fmt.Sprintf("Detected: %s. Space toggles, enter confirms.", kind)).
-			Options(opts...).
-			Value(&keys),
-	)).WithHeight(min(len(opts)+6, 20)).Run()
-	if err != nil {
-		return nil, err
-	}
-
-	picked := map[string]bool{}
-	for _, k := range keys {
-		picked[k] = true
-	}
-	var out []Component
-	for _, c := range available {
-		if picked[c.Key] {
-			out = append(out, c)
-		}
-	}
-	return out, nil
-}
-
-// resolveConflicts asks, per file that already exists and differs, what to do.
-// Answering for one file offers to apply the same choice to the rest, because
-// a fresh machine with a pre-existing config tends to want one blanket answer.
-func resolveConflicts(conflicts []string) (map[string]Resolution, error) {
-	decisions := map[string]Resolution{}
-	if len(conflicts) == 0 {
-		return decisions, nil
-	}
-
-	fmt.Println(warnStyle.Render(fmt.Sprintf("\n%d file(s) already exist and differ from the repo:", len(conflicts))))
-	for _, p := range conflicts {
-		fmt.Println("  " + p)
-	}
-	fmt.Println()
-
-	var applyAll bool
-	var blanket Resolution
-
-	for _, path := range conflicts {
-		if applyAll {
-			decisions[path] = blanket
-			continue
-		}
-
-		for {
-			var choice Resolution
-			err := huh.NewForm(huh.NewGroup(
-				huh.NewSelect[Resolution]().
-					Title(path).
-					Description("This file exists already and does not match the repo.").
-					Options(
-						huh.NewOption("Show the diff first", ShowDiff),
-						huh.NewOption("Keep mine (skip this file)", Keep),
-						huh.NewOption("Back it up, then take the repo's", BackupTo),
-						huh.NewOption("Overwrite with the repo's", Overwrite),
-					).
-					Value(&choice),
-			)).Run()
-			if err != nil {
-				return nil, err
-			}
-
-			if choice == ShowDiff {
-				fmt.Println()
-				_ = showDiff(path)
-				fmt.Println()
-				continue
-			}
-
-			decisions[path] = choice
-
-			// Only worth asking when there are others still undecided.
-			if len(decisions) < len(conflicts) {
-				var rest bool
-				if err := huh.NewForm(huh.NewGroup(
-					huh.NewConfirm().
-						Title(fmt.Sprintf("Apply %q to the remaining %d file(s)?",
-							choice, len(conflicts)-len(decisions))).
-						Value(&rest),
-				)).Run(); err != nil {
-					return nil, err
-				}
-				if rest {
-					applyAll, blanket = true, choice
-				}
-			}
-			break
-		}
-	}
-	return decisions, nil
-}
-
-// partition turns the conflict decisions into the list of paths to apply and
-// the list to back up first. Files the user kept are simply left out.
-func partition(fresh []string, decisions map[string]Resolution) (apply, backups []string) {
-	apply = append(apply, fresh...)
-	for path, d := range decisions {
-		switch d {
-		case Overwrite:
-			apply = append(apply, path)
-		case BackupTo:
-			apply = append(apply, path)
-			backups = append(backups, path)
-		case Keep:
-			// deliberately not applied
-		}
-	}
-	sort.Strings(apply)
-	sort.Strings(backups)
-	return apply, backups
-}
-
-func execute(selected []Component, pacman, aur, apply, backups []string) error {
-	step := func(name string) { fmt.Println("\n" + titleStyle.Render("▸ "+name)) }
-
-	if len(pacman) > 0 {
-		step("Installing packages")
-		if err := installPackages(pacman); err != nil {
-			return fmt.Errorf("pacman: %w", err)
-		}
-	}
-	if len(aur) > 0 {
-		step("Installing AUR packages")
-		if err := installAUR(aur); err != nil {
-			// Not fatal: the rest of the setup is still worth completing.
-			fmt.Println(errStyle.Render("  " + err.Error()))
-		}
-	}
-
-	if len(backups) > 0 {
-		step("Backing up existing files")
-		for _, p := range backups {
-			if err := backup(p); err != nil {
-				return fmt.Errorf("backing up %s: %w", p, err)
-			}
-			fmt.Printf("  %s → %s\n", p, p+".before-setup")
-		}
-	}
-
-	if len(apply) > 0 {
-		step("Applying configs")
-		if err := applyPaths(apply); err != nil {
-			return fmt.Errorf("chezmoi apply: %w", err)
-		}
-		fmt.Printf("  %d path(s) applied\n", len(apply))
-	}
-
-	step("Bootstrapping")
-	for _, c := range selected {
-		for _, s := range c.Post {
-			if s.Check != nil && s.Check() {
-				fmt.Printf("  %s %s\n", okStyle.Render("✓"), dimStyle.Render(s.Name+" (already done)"))
-				continue
-			}
-			fmt.Printf("  → %s\n", s.Name)
-			if err := s.Run(); err != nil {
-				// One failed bootstrap should not abort the whole setup.
-				fmt.Println(errStyle.Render("    failed: " + err.Error()))
-			}
-		}
-	}
-
-	report(selected)
-	return nil
-}
-
-func report(selected []Component) {
-	picked := map[string]bool{}
-	for _, c := range selected {
-		picked[c.Key] = true
-	}
-
-	checks := systemChecks(picked)
-	var failed []Check
-	for _, c := range checks {
-		if !c.OK {
-			failed = append(failed, c)
-		}
-	}
-
-	fmt.Println("\n" + titleStyle.Render("▸ System checks"))
-	for _, c := range checks {
-		mark := okStyle.Render("✓")
-		if !c.OK {
-			mark = warnStyle.Render("!")
-		}
-		fmt.Printf("  %s %s\n", mark, c.Name)
-	}
-
-	if len(failed) > 0 {
-		fmt.Println(warnStyle.Render("\nStill to do by hand:"))
-		for _, c := range failed {
-			fmt.Printf("  %s\n    %s\n", c.Name, dimStyle.Render(c.Fix))
-		}
-	}
-
-	fmt.Println(okStyle.Render("\nsetup complete"))
-}
-
-// -- presentation ------------------------------------------------------------
-
-func printPlan(selected []Component, pacman, aur, fresh, conflicts []string) {
-	fmt.Println("\n" + titleStyle.Render("▸ Plan"))
-	names := make([]string, 0, len(selected))
-	for _, c := range selected {
-		names = append(names, c.Name)
-	}
-	fmt.Printf("  components : %s\n", strings.Join(names, ", "))
-	fmt.Printf("  packages   : %s\n", countLabel(len(pacman)+len(aur), "to install", "already installed"))
-	fmt.Printf("  new files  : %s\n", countLabel(len(fresh), "to create", "none"))
-	fmt.Printf("  conflicts  : %s\n", countLabel(len(conflicts), "need a decision", "none"))
-	fmt.Printf("  bootstrap  : %s\n", countLabel(len(pendingSteps(selected)), "step(s) to run", "nothing pending"))
-}
-
-// pendingSteps lists the post-install work that has not already been done.
-func pendingSteps(selected []Component) []string {
-	var out []string
-	for _, c := range selected {
-		for _, s := range c.Post {
-			if s.Check == nil || !s.Check() {
-				out = append(out, s.Name)
-			}
-		}
-	}
-	return out
-}
-
-func planSummary(pacman, aur, apply, backups []string) string {
-	var b strings.Builder
-	if n := len(pacman) + len(aur); n > 0 {
-		fmt.Fprintf(&b, "install %d package(s)\n", n)
-	}
-	if len(apply) > 0 {
-		fmt.Fprintf(&b, "write %d config path(s)\n", len(apply))
-	}
-	if len(backups) > 0 {
-		fmt.Fprintf(&b, "back up %d existing file(s) first\n", len(backups))
-	}
-	if b.Len() == 0 {
-		return "Nothing to install — this will only run the bootstrap checks."
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func printDetail(heading string, items []string) {
-	if len(items) == 0 {
-		return
-	}
-	fmt.Println("\n  " + heading + ":")
-	for _, i := range items {
-		fmt.Println("    " + i)
-	}
-}
-
-func countLabel(n int, some, none string) string {
-	if n == 0 {
-		return dimStyle.Render(none)
-	}
-	return fmt.Sprintf("%d %s", n, some)
-}
-
-func archLabel() string {
-	if isLaptop() {
-		return "laptop"
-	}
-	return "desktop"
 }

@@ -1,4 +1,4 @@
-package main
+package theme
 
 // The theme renderers. Each takes the palette and writes files; live-reload
 // side effects live in reloadAll so a dry render stays cheap.
@@ -8,85 +8,14 @@ package main
 // files are diffed against the repo, so drift would be noise at best.
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
+
+	"github.com/jrdriscoll17/dotfiles/bootstrap/internal/sys"
 )
-
-// writeFile creates parent directories, like Python's write().
-func writeFile(path, content string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(content), 0o644)
-}
-
-func stripHash(c string) string { return strings.TrimPrefix(c, "#") }
-
-// rgbaColor renders Hyprland's rgba(RRGGBBAA).
-func rgbaColor(c string, a float64) string {
-	return fmt.Sprintf("rgba(%s%02x)", stripHash(c), int(roundHalfUp(a*255)))
-}
-
-// roundHalfUp matches Python's round() for the values used here. Only ever
-// called with 255 and 0.93*255 / 0.67*255, none of which land on .5.
-func roundHalfUp(f float64) float64 {
-	return float64(int(f + 0.5))
-}
-
-// subLine rewrites one setting in a config we do not own outright.
-func subLine(path, pattern, replacement string) error {
-	if !exists(path) {
-		return nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	re, err := regexp.Compile("(?m)" + pattern)
-	if err != nil {
-		return err
-	}
-	text := string(raw)
-	out := re.ReplaceAllLiteralString(text, replacement)
-	if out == text {
-		return nil
-	}
-	return os.WriteFile(path, []byte(out), 0o644)
-}
-
-// setINIKey sets key=value, creating the file, the section or the key as
-// needed. subLine alone silently does nothing when the key is absent, which is
-// how a config can end up stranded on the previous theme.
-func setINIKey(path, section, key, value string) error {
-	line := key + "=" + value
-	var text string
-	if raw, err := os.ReadFile(path); err == nil {
-		text = string(raw)
-	}
-
-	keyRe := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key) + `=`)
-	sectionRe := regexp.MustCompile(`(?m)^\[` + regexp.QuoteMeta(section) + `\]`)
-
-	switch {
-	case keyRe.MatchString(text):
-		full := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key) + `=.*$`)
-		text = full.ReplaceAllLiteralString(text, line)
-	case sectionRe.MatchString(text):
-		text = replaceFirstFunc(sectionRe, text, func(m string) string {
-			return m + "\n" + line
-		})
-	default:
-		text = strings.TrimLeft(strings.TrimRight(text, " \t\n\r")+
-			"\n\n["+section+"]\n"+line+"\n", " \t\n\r")
-	}
-	return writeFile(path, text)
-}
 
 // -- renderers ---------------------------------------------------------------
 
@@ -95,7 +24,7 @@ func renderQuickshell(t *Theme) error {
 	for _, k := range t.Colors.Keys() {
 		lines = append(lines, fmt.Sprintf("\treadonly property color %s: \"%s\"", k, t.c(k)))
 	}
-	return writeFile(inHome(".config/quickshell/generated/Colors.qml"),
+	return sys.WriteFile(sys.InHome(".config/quickshell/generated/Colors.qml"),
 		fmt.Sprintf(`pragma Singleton
 
 import Quickshell
@@ -115,237 +44,8 @@ Singleton {
 `, t.banner, t.Name, t.Label, strings.Join(lines, "\n")))
 }
 
-var iconRoots = func() []string {
-	return []string{inHome(".local/share/icons"), inHome(".icons"), "/usr/share/icons"}
-}
-
-// Categories worth indexing: app launchers, notification icons, tray icons.
-var iconCategories = []string{"apps", "status", "devices", "places", "actions", "categories"}
-
-// iconThemeChain is a theme plus whatever it inherits, in lookup order, ending
-// at hicolor.
-func iconThemeChain(name string) []string {
-	var chain []string
-	seen := map[string]bool{}
-	queue := []string{name, "hicolor"}
-
-	for len(queue) > 0 {
-		theme := queue[0]
-		queue = queue[1:]
-		if seen[theme] {
-			continue
-		}
-		seen[theme] = true
-
-		for _, root := range iconRoots() {
-			dir := filepath.Join(root, theme)
-			if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-				continue
-			}
-			chain = append(chain, dir)
-			index := filepath.Join(dir, "index.theme")
-			raw, err := os.ReadFile(index)
-			if err != nil {
-				continue
-			}
-			for _, line := range strings.Split(string(raw), "\n") {
-				if after, ok := strings.CutPrefix(line, "Inherits="); ok {
-					for _, p := range strings.Split(after, ",") {
-						queue = append(queue, strings.TrimSpace(p))
-					}
-				}
-			}
-		}
-	}
-	return chain
-}
-
-// sizeRank orders directories so bigger (and scalable) wins: a 512px source
-// beats a 16px one for a 34px notification badge.
-//
-// The @2x suffix counts: "32x32@2x" holds 64px artwork, so it outranks "32x32".
-// theme.py stripped the suffix instead, which tied the two and left the winner
-// to whatever order the filesystem happened to return directories in — so its
-// icons.json was not reproducible across machines. Ranking by effective pixels
-// is both deterministic and what "bigger wins" was always meant to say.
-func sizeRank(name string) (int, int) {
-	if strings.HasPrefix(name, "scalable") {
-		return 1, 0
-	}
-	head, _, _ := strings.Cut(name, "x")
-	n, err := strconv.Atoi(head)
-	if err != nil {
-		return 0, 0
-	}
-	scale := 1
-	if _, after, found := strings.Cut(name, "@"); found {
-		digits := after
-		if i := strings.IndexFunc(after, func(r rune) bool { return r < '0' || r > '9' }); i >= 0 {
-			digits = after[:i]
-		}
-		if s, err := strconv.Atoi(digits); err == nil && s > 0 {
-			scale = s
-		}
-	}
-	return 0, n * scale
-}
-
-// sortBySizeDesc mirrors Python's sorted(key=size_rank, reverse=True), which is
-// stable, so equal ranks keep directory order.
-func sortBySizeDesc(names []string) {
-	sort.SliceStable(names, func(i, j int) bool {
-		ai, aj := name2rank(names[i]), name2rank(names[j])
-		if ai[0] != aj[0] {
-			return ai[0] > aj[0]
-		}
-		return ai[1] > aj[1]
-	})
-}
-
-func name2rank(n string) [2]int {
-	a, b := sizeRank(n)
-	return [2]int{a, b}
-}
-
-func subdirs(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if fi, err := os.Stat(filepath.Join(dir, e.Name())); err == nil && fi.IsDir() {
-			out = append(out, e.Name())
-		}
-	}
-	return out
-}
-
-// renderIcons indexes icon-name -> file, because Qt inside Quickshell has no
-// icon theme. Setting one needs a platform theme plugin (qt6ct or the gtk one),
-// neither of which is installed, so Quickshell.iconPath() and image://icon/...
-// only ever resolve absolute paths. The shell reads this index instead; see
-// services/Icons.qml.
-func renderIcons(t *Theme) error {
-	out := inHome(".config/quickshell/generated/icons.json")
-	marker := inHome(".config/quickshell/generated/icons.theme")
-	iconTheme := t.GTK.Icons
-
-	if exists(out) && exists(marker) {
-		if raw, err := os.ReadFile(marker); err == nil &&
-			strings.TrimSpace(string(raw)) == iconTheme {
-			return nil
-		}
-	}
-
-	// Each theme has its own icon set, so a naive rebuild costs ~1.6s of disk
-	// walking on every single switch. Cached per icon theme, that becomes a
-	// 2.5MB copy. `theme icons` clears the cache when new apps are installed.
-	cache := filepath.Join(cacheDir(), "icons-"+iconTheme+".json")
-	if raw, err := os.ReadFile(cache); err == nil {
-		if err := writeFile(out, string(raw)); err != nil {
-			return err
-		}
-		return writeFile(marker, iconTheme+"\n")
-	}
-
-	index := map[string]string{}
-	add := func(path string) {
-		stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		if _, seen := index[stem]; !seen {
-			index[stem] = path
-		}
-	}
-	isIcon := func(name string) bool {
-		switch filepath.Ext(name) {
-		case ".svg", ".png", ".xpm":
-			return true
-		}
-		return false
-	}
-
-	for _, themeDir := range iconThemeChain(iconTheme) {
-		// Two layouts in the wild: Papirus nests size/category, the Suru themes
-		// nest category/size. Walk both by checking which half of each pair
-		// names a category.
-		outers := subdirs(themeDir)
-		sortBySizeDesc(outers)
-		for _, outer := range outers {
-			outerPath := filepath.Join(themeDir, outer)
-
-			var innerPaths []string
-			if slicesContains(iconCategories, outer) {
-				inners := subdirs(outerPath)
-				sortBySizeDesc(inners)
-				for _, in := range inners {
-					innerPaths = append(innerPaths, filepath.Join(outerPath, in))
-				}
-			} else {
-				for _, category := range iconCategories {
-					innerPaths = append(innerPaths, filepath.Join(outerPath, category))
-				}
-			}
-
-			for _, dir := range innerPaths {
-				entries, err := os.ReadDir(dir)
-				if err != nil {
-					continue
-				}
-				for _, e := range entries {
-					if isIcon(e.Name()) {
-						add(filepath.Join(dir, e.Name()))
-					}
-				}
-			}
-		}
-	}
-
-	// Legacy drop-box a lot of third-party packages still use.
-	if entries, err := os.ReadDir("/usr/share/pixmaps"); err == nil {
-		for _, e := range entries {
-			if isIcon(e.Name()) {
-				add(filepath.Join("/usr/share/pixmaps", e.Name()))
-			}
-		}
-	}
-
-	payload, err := compactSortedJSON(index)
-	if err != nil {
-		return err
-	}
-	if err := writeFile(out, payload); err != nil {
-		return err
-	}
-	if err := writeFile(cache, payload); err != nil {
-		return err
-	}
-	return writeFile(marker, iconTheme+"\n")
-}
-
-func slicesContains(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
-		}
-	}
-	return false
-}
-
-// compactSortedJSON matches json.dumps(separators=(",", ":"), sort_keys=True).
-// Go's encoder sorts map keys and emits no spaces already; HTML escaping is the
-// one difference that has to be turned off.
-func compactSortedJSON(m map[string]string) (string, error) {
-	var b strings.Builder
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(m); err != nil {
-		return "", err
-	}
-	return strings.TrimRight(b.String(), "\n"), nil
-}
-
 func renderKitty(t *Theme) error {
-	return writeFile(inHome(".config/kitty/theme.conf"),
+	return sys.WriteFile(sys.InHome(".config/kitty/theme.conf"),
 		fmt.Sprintf(`# %s
 
 foreground           %s
@@ -386,7 +86,7 @@ color15 %s
 
 func renderAlacritty(t *Theme) error {
 	x := func(col string) string { return "'0x" + stripHash(col) + "'" }
-	return writeFile(inHome(".config/alacritty/colors.toml"),
+	return sys.WriteFile(sys.InHome(".config/alacritty/colors.toml"),
 		fmt.Sprintf(`# %s
 
 [colors.primary]
@@ -436,7 +136,7 @@ func renderNvim(t *Theme) error {
 	for _, k := range t.Colors.Keys() {
 		entries = append(entries, fmt.Sprintf("\t\t%s = \"%s\",", k, t.c(k)))
 	}
-	return writeFile(inHome(".config/nvim/lua/theme.lua"),
+	return sys.WriteFile(sys.InHome(".config/nvim/lua/theme.lua"),
 		fmt.Sprintf(`-- %s
 --
 -- lua/plugins/colorscheme.lua reads this to pick the colorscheme and to patch
@@ -452,7 +152,7 @@ return {
 }
 
 func renderDoom(t *Theme) error {
-	return writeFile(inHome(".config/doom/theme.el"),
+	return sys.WriteFile(sys.InHome(".config/doom/theme.el"),
 		fmt.Sprintf(`;;; theme.el -*- lexical-binding: t; -*-
 ;; %s
 ;;
@@ -483,7 +183,7 @@ func renderDoom(t *Theme) error {
 func renderHypr(t *Theme) error {
 	wallpaper := t.wallpaperPath()
 
-	if err := writeFile(inHome(".config/hypr/hyprpaper.conf"),
+	if err := sys.WriteFile(sys.InHome(".config/hypr/hyprpaper.conf"),
 		fmt.Sprintf(`# %s
 
 wallpaper {
@@ -497,7 +197,7 @@ splash = false
 	}
 
 	// hyprlock.conf sources this.
-	return writeFile(inHome(".config/hypr/colors.conf"),
+	return sys.WriteFile(sys.InHome(".config/hypr/colors.conf"),
 		fmt.Sprintf(`# %s
 
 $wallpaper = %s
@@ -521,7 +221,7 @@ $orange = %s
 }
 
 func renderBtop(t *Theme) error {
-	err := writeFile(filepath.Join(inHome(".config/btop/themes"), t.Name+".theme"),
+	err := sys.WriteFile(filepath.Join(sys.InHome(".config/btop/themes"), t.Name+".theme"),
 		fmt.Sprintf(`# %s
 
 theme[main_bg]="%s"
@@ -579,27 +279,14 @@ theme[upload_end]="%s"
 	if err != nil {
 		return err
 	}
-	return subLine(inHome(".config/btop/btop.conf"),
+	return subLine(sys.InHome(".config/btop/btop.conf"),
 		`^color_theme = ".*"$`,
-		fmt.Sprintf(`color_theme = "%s/.config/btop/themes/%s.theme"`, home(), t.Name))
-}
-
-// themeSearch finds an installed GTK theme directory.
-func themeSearch(name string) string {
-	for _, root := range []string{
-		inHome(".themes"), inHome(".local/share/themes"), "/usr/share/themes",
-	} {
-		dir := filepath.Join(root, name)
-		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			return dir
-		}
-	}
-	return ""
+		fmt.Sprintf(`color_theme = "%s/.config/btop/themes/%s.theme"`, sys.Home(), t.Name))
 }
 
 func renderGTK(t *Theme) error {
 	for _, version := range []string{"gtk-3.0", "gtk-4.0"} {
-		path := inHome(filepath.Join(".config", version, "settings.ini"))
+		path := sys.InHome(filepath.Join(".config", version, "settings.ini"))
 		for _, kv := range [][2]string{
 			{"gtk-theme-name", t.GTK.Theme},
 			{"gtk-icon-theme-name", t.GTK.Icons},
@@ -615,8 +302,8 @@ func renderGTK(t *Theme) error {
 	// completely separate file. nwg-look owns the header and includes
 	// .gtkrc-2.0.mine, so keep both conventions intact and only retarget the
 	// theme lines.
-	gtkrc := inHome(".gtkrc-2.0")
-	if exists(gtkrc) {
+	gtkrc := sys.InHome(".gtkrc-2.0")
+	if sys.Exists(gtkrc) {
 		if err := subLine(gtkrc, `^gtk-theme-name=.*$`,
 			fmt.Sprintf(`gtk-theme-name="%s"`, t.GTK.Theme)); err != nil {
 			return err
@@ -626,7 +313,7 @@ func renderGTK(t *Theme) error {
 			return err
 		}
 	} else {
-		if err := writeFile(gtkrc, fmt.Sprintf(
+		if err := sys.WriteFile(gtkrc, fmt.Sprintf(
 			"# %s\ngtk-theme-name=\"%s\"\ngtk-icon-theme-name=\"%s\"\ngtk-font-name=\"Ubuntu Nerd Font 11\"\n",
 			t.banner, t.GTK.Theme, t.GTK.Icons)); err != nil {
 			return err
@@ -645,8 +332,8 @@ func renderGTK(t *Theme) error {
 	}
 	themeDir := themeSearch(wanted)
 	for _, css := range []string{"gtk.css", "gtk-dark.css"} {
-		dst := inHome(filepath.Join(".config/gtk-4.0", css))
-		if exists(dst) {
+		dst := sys.InHome(filepath.Join(".config/gtk-4.0", css))
+		if sys.Exists(dst) {
 			if err := os.Remove(dst); err != nil {
 				return err
 			}
@@ -655,7 +342,7 @@ func renderGTK(t *Theme) error {
 			continue
 		}
 		src := filepath.Join(themeDir, "gtk-4.0", css)
-		if !exists(src) {
+		if !sys.Exists(src) {
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -677,16 +364,16 @@ var generalColorsRe = regexp.MustCompile(`(?s)\[GeneralColors\]\n[^\[]*`)
 // [GeneralColors] block rewritten — which is the part that reads as the theme.
 func renderQt(t *Theme) error {
 	name := t.GTK.Kvantum
-	dest := inHome(filepath.Join(".config/Kvantum", name))
+	dest := sys.InHome(filepath.Join(".config/Kvantum", name))
 	baseConf := filepath.Join(kvantumBase, filepath.Base(kvantumBase)+".kvconfig")
 
-	if exists(baseConf) {
+	if sys.Exists(baseConf) {
 		if err := os.MkdirAll(dest, 0o755); err != nil {
 			return err
 		}
 		svg := filepath.Join(dest, name+".svg")
-		if !exists(svg) {
-			if err := copyFile(filepath.Join(kvantumBase, filepath.Base(kvantumBase)+".svg"),
+		if !sys.Exists(svg) {
+			if err := sys.CopyFile(filepath.Join(kvantumBase, filepath.Base(kvantumBase)+".svg"),
 				svg, 0o644); err != nil {
 				return err
 			}
@@ -722,14 +409,14 @@ progress.indicator.text.color=%s
 		if err != nil {
 			return err
 		}
-		text := replaceFirst(generalColorsRe, string(raw), colors)
-		if err := writeFile(filepath.Join(dest, name+".kvconfig"),
+		text := sys.ReplaceFirst(generalColorsRe, string(raw), colors)
+		if err := sys.WriteFile(filepath.Join(dest, name+".kvconfig"),
 			fmt.Sprintf("# %s\n%s", t.banner, text)); err != nil {
 			return err
 		}
 	}
 
-	if err := setINIKey(inHome(".config/Kvantum/kvantum.kvconfig"),
+	if err := setINIKey(sys.InHome(".config/Kvantum/kvantum.kvconfig"),
 		"General", "theme", name); err != nil {
 		return err
 	}
@@ -738,7 +425,7 @@ progress.indicator.text.color=%s
 	// this is what gives Qt an icon theme *at all* — Quickshell included, since
 	// Hyprland exports QT_QPA_PLATFORMTHEME=qt6ct to everything it starts.
 	for _, qt := range []string{"qt5ct", "qt6ct"} {
-		conf := inHome(filepath.Join(".config", qt, qt+".conf"))
+		conf := sys.InHome(filepath.Join(".config", qt, qt+".conf"))
 		for _, kv := range [][2]string{
 			{"icon_theme", t.GTK.Icons},
 			{"style", "kvantum"},

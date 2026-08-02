@@ -1,4 +1,4 @@
-package main
+package setup
 
 // Component is one selectable unit of the setup: the packages it needs, the
 // config paths it owns, and any bootstrap that has to happen after the files

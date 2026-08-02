@@ -1,4 +1,4 @@
-package main
+package recolor
 
 // Build a Material-Black + Suru-GLOW pair in an arbitrary accent colour.
 //
@@ -28,13 +28,14 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/jrdriscoll17/dotfiles/bootstrap/internal/sys"
 )
 
 // -- colour maths (ports of Python's colorsys) -------------------------------
@@ -152,10 +153,10 @@ var (
 // build can itself be the base for the next one and the originals need not stay
 // on disk.
 func readBase(base string) (baseColours, error) {
-	gtk := inHome(filepath.Join(".themes", "Material-Black-"+base, "gtk-3.0", "gtk.css"))
-	icon := inHome(filepath.Join(".local/share/icons", "MB-"+base+"-Suru-GLOW",
+	gtk := sys.InHome(filepath.Join(".themes", "Material-Black-"+base, "gtk-3.0", "gtk.css"))
+	icon := sys.InHome(filepath.Join(".local/share/icons", "MB-"+base+"-Suru-GLOW",
 		"places", "scalable", "folder.svg"))
-	if !exists(gtk) || !exists(icon) {
+	if !sys.Exists(gtk) || !sys.Exists(icon) {
 		return baseColours{}, fmt.Errorf(
 			"%s is not installed (need both the GTK theme and the icon set)", base)
 	}
@@ -316,71 +317,6 @@ func nrgba(r, g, b, a int) color.NRGBA {
 	return color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: uint8(a)}
 }
 
-// copyTree copies a directory verbatim, preserving symlinks and modes. The icon
-// sets are mostly symlinks, so following them would multiply ~25k icons into a
-// far larger tree.
-func copyTree(src, dst string) error {
-	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		switch {
-		case info.Mode()&os.ModeSymlink != 0:
-			link, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			return os.Symlink(link, target)
-		case d.IsDir():
-			return os.MkdirAll(target, info.Mode().Perm())
-		default:
-			return copyFile(path, target, info.Mode().Perm())
-		}
-	})
-}
-
-func copyFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
-}
-
-// rewrite applies fn to a file's contents, writing back only if it changed.
-func rewrite(path string, fn func(string) (string, bool)) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	text, changed := fn(string(raw))
-	if !changed {
-		return nil
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(text), info.Mode().Perm())
-}
-
 // -- building ----------------------------------------------------------------
 
 var textSuffixes = map[string]bool{
@@ -389,15 +325,15 @@ var textSuffixes = map[string]bool{
 }
 
 func buildGTK(base, name string, accent RGB) (string, error) {
-	src := inHome(filepath.Join(".themes", "Material-Black-"+base))
+	src := sys.InHome(filepath.Join(".themes", "Material-Black-"+base))
 	if fi, err := os.Stat(src); err != nil || !fi.IsDir() {
 		return "", fmt.Errorf("%s is not installed", src)
 	}
-	dest := inHome(filepath.Join(".themes", "Material-Black-"+name))
+	dest := sys.InHome(filepath.Join(".themes", "Material-Black-"+name))
 	if err := os.RemoveAll(dest); err != nil {
 		return "", err
 	}
-	if err := copyTree(src, dest); err != nil {
+	if err := sys.CopyTree(src, dest); err != nil {
 		return "", err
 	}
 
@@ -424,7 +360,7 @@ func buildGTK(base, name string, accent RGB) (string, error) {
 		}
 		switch {
 		case textSuffixes[strings.ToLower(filepath.Ext(path))]:
-			return rewrite(path, func(t string) (string, bool) {
+			return sys.Rewrite(path, func(t string) (string, bool) {
 				return recolourText(t, mapping)
 			})
 		case strings.EqualFold(filepath.Ext(path), ".png"):
@@ -438,8 +374,8 @@ func buildGTK(base, name string, accent RGB) (string, error) {
 
 	// index.theme names the theme to GTK; it has to match the directory.
 	index := filepath.Join(dest, "index.theme")
-	if exists(index) {
-		if err := rewrite(index, func(t string) (string, bool) {
+	if sys.Exists(index) {
+		if err := sys.Rewrite(index, func(t string) (string, bool) {
 			out := strings.ReplaceAll(t, "Material-Black-"+base, "Material-Black-"+name)
 			return out, out != t
 		}); err != nil {
@@ -450,15 +386,15 @@ func buildGTK(base, name string, accent RGB) (string, error) {
 }
 
 func buildIcons(base, name string, accent RGB) (string, int, error) {
-	src := inHome(filepath.Join(".local/share/icons", "MB-"+base+"-Suru-GLOW"))
+	src := sys.InHome(filepath.Join(".local/share/icons", "MB-"+base+"-Suru-GLOW"))
 	if fi, err := os.Stat(src); err != nil || !fi.IsDir() {
 		return "", 0, fmt.Errorf("%s is not installed", src)
 	}
-	dest := inHome(filepath.Join(".local/share/icons", "MB-"+name+"-Suru-GLOW"))
+	dest := sys.InHome(filepath.Join(".local/share/icons", "MB-"+name+"-Suru-GLOW"))
 	if err := os.RemoveAll(dest); err != nil {
 		return "", 0, err
 	}
-	if err := copyTree(src, dest); err != nil {
+	if err := sys.CopyTree(src, dest); err != nil {
 		return "", 0, err
 	}
 
@@ -483,7 +419,7 @@ func buildIcons(base, name string, accent RGB) (string, int, error) {
 		if info, ierr := d.Info(); ierr == nil && info.Mode()&os.ModeSymlink != 0 {
 			return nil
 		}
-		return rewrite(path, func(t string) (string, bool) {
+		return sys.Rewrite(path, func(t string) (string, bool) {
 			out, changed := recolourText(t, mapping)
 			if changed {
 				count++
@@ -496,11 +432,11 @@ func buildIcons(base, name string, accent RGB) (string, int, error) {
 	}
 
 	index := filepath.Join(dest, "index.theme")
-	if exists(index) {
-		if err := rewrite(index, func(t string) (string, bool) {
-			out := replaceFirst(nameRe, t, "Name=MB-"+name+"-Suru-GLOW")
+	if sys.Exists(index) {
+		if err := sys.Rewrite(index, func(t string) (string, bool) {
+			out := sys.ReplaceFirst(nameRe, t, "Name=MB-"+name+"-Suru-GLOW")
 			if !inheritsRe.MatchString(out) {
-				out = replaceFirstFunc(commentRe, out, func(m string) string {
+				out = sys.ReplaceFirstFunc(commentRe, out, func(m string) string {
 					return m + "\nInherits=Papirus-Dark,Papirus,hicolor"
 				})
 			}
@@ -512,22 +448,8 @@ func buildIcons(base, name string, accent RGB) (string, int, error) {
 	return dest, count, nil
 }
 
-// replaceFirst substitutes only the first match, which is what Python's
-// re.sub(..., count=1) does.
-func replaceFirst(re *regexp.Regexp, text, replacement string) string {
-	return replaceFirstFunc(re, text, func(string) string { return replacement })
-}
-
-func replaceFirstFunc(re *regexp.Regexp, text string, fn func(string) string) string {
-	loc := re.FindStringIndex(text)
-	if loc == nil {
-		return text
-	}
-	return text[:loc[0]] + fn(text[loc[0]:loc[1]]) + text[loc[1]:]
-}
-
 // Recolor is the entry point behind `setup recolor`.
-func Recolor(base, colour, name string) error {
+func Run(base, colour, name string) error {
 	accent, err := parseHex(colour)
 	if err != nil {
 		return err
