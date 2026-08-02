@@ -91,9 +91,12 @@ enters git and switching themes produces no diffs.
 `run_onchange_after_apply-theme.sh.tmpl` rebuilds it after `chezmoi apply`,
 which is what keeps a fresh machine complete — `kitty.conf` has
 `include theme.conf` and errors outright if it is missing. It re-runs whenever a
-palette changes, tracked by content hashes in its comments. The renderers
-themselves live in hydra and cannot be hashed from here, so run `theme apply` by
-hand after a hydra upgrade that changes output.
+palette changes, tracked by content hashes in its comments.
+
+The renderers live in hydra and cannot be hashed from here, but that needs no
+manual step: hydra fingerprints its own binary against the output it wrote, so
+an upgrade that changes a renderer shows up in `hydra status` and is re-rendered
+by `hydra sync`.
 
 A few files are *mutated* in place by the switcher rather than generated whole
 (`gtk-3.0/settings.ini`, `qt5ct/qt6ct.conf`, `btop.conf`), so they hold real

@@ -14,8 +14,9 @@
 # and this puts it back.
 #
 # The renderers live in hydra, a separate repo, so they cannot be hashed from
-# here — upgrading hydra does not re-trigger this. Run `theme apply` by hand
-# after an upgrade that changes output.
+# here. That is fine: hydra fingerprints its own binary against the output it
+# wrote, so an upgrade that changes a renderer is caught by `hydra status` and
+# fixed by `hydra sync`. This hook only has to cover palette edits.
 #
 # evergreen: {{ include "dot_config/theme/themes/evergreen.json" | sha256sum }}
 # ice-blue:  {{ include "dot_config/theme/themes/ice-blue.json" | sha256sum }}
