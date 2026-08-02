@@ -118,7 +118,12 @@ func catalog() []Component {
 				".config/gtk-3.0", ".config/gtk-4.0", ".gtkrc-2.0",
 				".config/qt5ct", ".config/qt6ct", ".config/mimeapps.list",
 			},
+			// Order matters: the palettes point at GTK and icon themes that
+			// have to exist on disk before rendering means anything.
 			Post: []Step{
+				{Name: "base Material-Black + Suru-GLOW pair", Check: themeBaseInstalled, Run: installThemeBase},
+				{Name: "Colloid gtk4 themes", Check: colloidInstalled, Run: installColloid},
+				{Name: "derive per-palette GTK/icon themes", Check: paletteThemesBuilt, Run: buildPaletteThemes},
 				{Name: "render the active theme", Check: themeRendered, Run: applyTheme},
 			},
 		},

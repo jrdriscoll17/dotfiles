@@ -106,19 +106,33 @@ Machine-local state is ignored too — `fish_variables`, `theme/current`, the
 GTK4 css symlinks into the generated `~/.themes/` tree, and the wallpapers
 symlink. See `.chezmoiignore`, which explains each entry.
 
-## Not reproducible: GTK and icon theme assets
+## GTK and icon theme assets
 
 `~/.themes/Material-Black-*`, `~/.themes/Colloid-*` and
 `~/.local/share/icons/MB-*-Suru-GLOW` are referenced by every palette but are
-in no repo and no package. `recolor.py` derives the Material-Black/Suru-GLOW
-pair from an *existing* pair, and there is no upstream base left on this
-machine to derive from; the Colloid gtk4 themes were installed by hand.
+in no repo and no package — they are built, not stored. `setup` rebuilds them
+from upstream in three steps:
 
-Nothing errors without them — you just get an unstyled desktop — so `setup`
-reports them explicitly under system checks. On a new machine, copy
-`~/.themes` and `~/.local/share/icons` across, or reinstall an upstream
-Material-Black + Suru-GLOW pair and rebuild with
-`theme recolor <base> <#hex> <name>`.
+1. **Base pair** — a sparse clone of
+   [rtl88-Themes](https://github.com/rtlewis88/rtl88-Themes) branch
+   `material-black-COLORS`, which carries the GTK themes *and* their matching
+   Suru-GLOW icon sets. Only one colour is checked out (~150M rather than the
+   repo's ~850M) and installed as `Material-Black-Blueberry`, dropping the
+   version suffix upstream uses so `recolor.py` can find it.
+2. **Colloid gtk4** — clones
+   [Colloid-gtk-theme](https://github.com/vinceliuice/Colloid-gtk-theme) and
+   runs its `install.sh`, deriving the flags from each palette's theme name
+   (`Colloid-Green-Dark-Everforest` → `-t green -c dark --tweaks everforest`).
+3. **Per-palette derive** — `recolor.py <base> <accent> <name>` for each
+   palette, in its own accent colour.
+
+Only the first step needs upstream: `recolor.py` reads a base's accent back off
+the installed theme, so any build can seed the next one and the original does
+not have to stay on disk. That is why this machine has no upstream base left —
+the palettes were derived from each other.
+
+Missing assets do not error, they just leave an unstyled desktop, so `setup`
+also reports them under system checks.
 
 ## Known issue: kitty font-face leak
 

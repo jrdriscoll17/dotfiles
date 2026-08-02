@@ -113,6 +113,7 @@ func runSetup() error {
 		printDetail("packages to install", append(pacman, aur...))
 		printDetail("files to create", fresh)
 		printDetail("files that differ (would prompt)", conflicts)
+		printDetail("bootstrap steps pending", pendingSteps(selected))
 		return nil
 	}
 
@@ -402,6 +403,20 @@ func printPlan(selected []Component, pacman, aur, fresh, conflicts []string) {
 	fmt.Printf("  packages   : %s\n", countLabel(len(pacman)+len(aur), "to install", "already installed"))
 	fmt.Printf("  new files  : %s\n", countLabel(len(fresh), "to create", "none"))
 	fmt.Printf("  conflicts  : %s\n", countLabel(len(conflicts), "need a decision", "none"))
+	fmt.Printf("  bootstrap  : %s\n", countLabel(len(pendingSteps(selected)), "step(s) to run", "nothing pending"))
+}
+
+// pendingSteps lists the post-install work that has not already been done.
+func pendingSteps(selected []Component) []string {
+	var out []string
+	for _, c := range selected {
+		for _, s := range c.Post {
+			if s.Check == nil || !s.Check() {
+				out = append(out, s.Name)
+			}
+		}
+	}
+	return out
 }
 
 func planSummary(pacman, aur, apply, backups []string) string {
