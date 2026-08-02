@@ -29,7 +29,18 @@ local function overrides()
 end
 
 local function apply(name)
-	vim.cmd.colorscheme(name)
+	-- Say so rather than leaving nvim on whatever was loaded before. A
+	-- colorscheme whose plugin is not installed reads as "the theme did not
+	-- change", which gives no clue that a plugin is missing.
+	local applied, err = pcall(vim.cmd.colorscheme, name)
+	if not applied then
+		vim.notify(
+			("theme: colorscheme %q failed to load — is its plugin installed? (:Lazy sync)\n%s")
+				:format(name, err),
+			vim.log.levels.WARN
+		)
+		return
+	end
 	overrides()
 	-- Re-apply if a colorscheme is loaded later by hand.
 	vim.api.nvim_create_autocmd("ColorScheme", { callback = overrides })
