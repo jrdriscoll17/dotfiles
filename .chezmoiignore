@@ -32,3 +32,6 @@
 
 # The repo README is documentation, not a dotfile.
 README.md
+
+# The setup TUI is source code that ships with the repo, not a dotfile.
+bootstrap

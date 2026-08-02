@@ -10,23 +10,47 @@ Source lives in `~/dotfiles` rather than chezmoi's default
 ## Install on a new machine
 
 ```sh
-sh -c "$(curl -fsLS get.chezmoi.io)" -- -b ~/.local/bin      # if chezmoi is absent
+sudo pacman -S --needed go git
 git clone git@github.com:jrdriscoll17/dotfiles.git ~/dotfiles
-chezmoi init --source ~/dotfiles
-chezmoi apply
+cd ~/dotfiles/bootstrap && make install
+setup
 ```
 
-`init` asks once whether the machine is a laptop and writes the answer to
-`~/.config/chezmoi/chezmoi.toml`; templates branch on it. Preview before
-committing to anything with `chezmoi diff`.
+`setup` is the interactive installer (`bootstrap/`). It detects the host, lets
+you pick components, installs their packages, hands the configs to chezmoi, and
+runs the bootstrap that nothing else tracks — tpm, fisher, lazy.nvim, Doom, the
+wallpapers clone, the first theme render. It installs chezmoi itself if absent.
 
-Wallpapers are a separate repo, referenced through a symlink that `theme.py`
-reads:
+It is re-runnable: everything is checked first, so a second run installs only
+what is missing and asks only about files that actually differ.
 
 ```sh
+setup          # interactive
+setup -plan    # report what would happen, change nothing
+```
+
+**Components are opt-out.** Doom Emacs and Media are off by default; anything
+in the list can be deselected. Laptop-only and desktop-only components are
+filtered by whether a battery exists.
+
+**Conflicts are yours to resolve.** When a config already exists and differs
+from the repo, `setup` stops and offers, per file: show the diff, keep yours,
+back yours up then take the repo's, or overwrite. Answer once and it offers to
+apply the same choice to the rest. Backups land beside the original as
+`<name>.before-setup`.
+
+### Doing it by hand
+
+`setup` only orchestrates; nothing stops you driving the pieces directly:
+
+```sh
+chezmoi init --source ~/dotfiles && chezmoi apply
 git clone git@github.com:jrdriscoll17/wallpapers.git ~/wallpapers
 ln -sfn ~/wallpapers ~/.config/hypr/wallpapers
 ```
+
+`init` asks once whether the machine is a laptop and writes the answer to
+`~/.config/chezmoi/chezmoi.toml`; templates branch on it.
 
 ## Workflow
 
@@ -81,6 +105,20 @@ the post-apply script immediately puts it back.
 Machine-local state is ignored too — `fish_variables`, `theme/current`, the
 GTK4 css symlinks into the generated `~/.themes/` tree, and the wallpapers
 symlink. See `.chezmoiignore`, which explains each entry.
+
+## Not reproducible: GTK and icon theme assets
+
+`~/.themes/Material-Black-*`, `~/.themes/Colloid-*` and
+`~/.local/share/icons/MB-*-Suru-GLOW` are referenced by every palette but are
+in no repo and no package. `recolor.py` derives the Material-Black/Suru-GLOW
+pair from an *existing* pair, and there is no upstream base left on this
+machine to derive from; the Colloid gtk4 themes were installed by hand.
+
+Nothing errors without them — you just get an unstyled desktop — so `setup`
+reports them explicitly under system checks. On a new machine, copy
+`~/.themes` and `~/.local/share/icons` across, or reinstall an upstream
+Material-Black + Suru-GLOW pair and rebuild with
+`theme recolor <base> <#hex> <name>`.
 
 ## Known issue: kitty font-face leak
 
