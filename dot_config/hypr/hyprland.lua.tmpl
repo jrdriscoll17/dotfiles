@@ -9,7 +9,12 @@
 -- Laptop: no fixed layout to hardcode, so take the panel's preferred mode and
 -- let Hyprland place any external display automatically. Workspace pinning is
 -- deliberately absent — it only makes sense with a known multi-head setup.
-hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
+--
+-- 1.5 suits the 2880x1800 panel (1920 logical px, same working width as the
+-- desktop's 4K-at-2). Scale is the one thing that cannot be left at a neutral
+-- default: at 1 a HiDPI panel renders everything unreadably small. Change it
+-- here if this ever runs on a laptop with a different panel.
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1.5 })
 {{- else }}
 hl.monitor({ output = "DP-2", mode = "3840x2160@120", position = "0x0", scale = 2 })
 hl.monitor({ output = "DP-1", mode = "3840x2160@120", position = "1920x0", scale = 2 })

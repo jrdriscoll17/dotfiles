@@ -81,6 +81,11 @@ PanelWindow {
 			barScreen: root.modelData
 		}
 
+		// Present on every machine; hides itself where there is no battery.
+		BatteryWidget {
+			anchors.verticalCenter: parent.verticalCenter
+		}
+
 		TrayWidget {
 			anchors.verticalCenter: parent.verticalCenter
 			barScreen: root.modelData
