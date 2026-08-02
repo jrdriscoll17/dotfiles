@@ -15,9 +15,14 @@ This repo is data. The tool that consumes it is
 ```sh
 sudo pacman -S --needed go git
 go install github.com/jrdriscoll17/hydra@latest
-hydra init          # clones this repo, sets up chezmoi, links `theme`
-hydra               # choose components and install them
+~/go/bin/hydra init # clones this repo, sets up chezmoi, links `theme`
+~/go/bin/hydra      # choose components and install them
 ```
+
+The full path is needed only for these two commands: `go install` writes to
+`~/go/bin`, and what puts that on `PATH` is `config.fish` in this repo — which
+hydra has not deployed yet. A new shell afterwards resolves `hydra` and `theme`
+by name.
 
 hydra detects the host, lets you pick components, installs their packages, hands
 these configs to chezmoi, and runs the bootstrap nothing else tracks — tpm,
