@@ -451,8 +451,7 @@ func buildPaletteThemes() error {
 			continue
 		}
 		fmt.Printf("    %s (%s from %s)\n", p.variant(), p.Colors.Accent, base)
-		if err := run("python3", inHome(".config/theme/recolor.py"),
-			base, p.Colors.Accent, p.variant()); err != nil {
+		if err := Recolor(base, p.Colors.Accent, p.variant()); err != nil {
 			return fmt.Errorf("recolouring %s: %w", p.variant(), err)
 		}
 	}

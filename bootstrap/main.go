@@ -44,6 +44,21 @@ const (
 )
 
 func main() {
+	// `setup recolor <base> <#hex> <name>` builds a Material-Black + Suru-GLOW
+	// pair without going near the TUI, so it can be scripted and so `theme
+	// recolor` can hand off to it.
+	if len(os.Args) > 1 && os.Args[1] == "recolor" {
+		if len(os.Args) != 5 {
+			fmt.Fprintln(os.Stderr, "usage: setup recolor <base-variant> <#hex> <name>")
+			os.Exit(2)
+		}
+		if err := Recolor(os.Args[2], os.Args[3], os.Args[4]); err != nil {
+			fmt.Fprintln(os.Stderr, errStyle.Render("recolor: "+err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
+
 	flag.Parse()
 	if err := runSetup(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {

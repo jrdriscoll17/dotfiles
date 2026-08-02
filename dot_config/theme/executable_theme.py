@@ -6,7 +6,7 @@ box is generated from it, so a theme is defined in exactly one place:
 
     theme list          # show the themes and which one is live
     theme icons         # rebuild the icon index (after installing apps)
-    theme recolor <base> <#hex> <name>   # a Material-Black set in any colour
+    theme recolor <base> <#hex> <name>   # a Material-Black set in any colour (via `setup`)
     theme set <name>    # switch to it
     theme apply         # re-render the current theme (run at Hyprland start)
     theme next          # cycle
@@ -26,8 +26,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 HOME = Path.home()
 CONF = HOME / ".config"
@@ -743,9 +741,14 @@ def main(argv: list[str]) -> None:
     elif cmd == "data":
         cmd_data()
     elif cmd == "recolor":
-        # Build a Material-Black + Suru-GLOW pair in an arbitrary colour.
-        import recolor
-        recolor.main(argv[1:])
+        # Build a Material-Black + Suru-GLOW pair in an arbitrary colour. This
+        # used to be recolor.py alongside this file; it now lives in the setup
+        # tool (~/dotfiles/bootstrap), which owns everything to do with
+        # installing and rebuilding those themes.
+        if not shutil.which("setup"):
+            die("recolor: `setup` is not installed — build it with "
+                "`cd ~/dotfiles/bootstrap && make install`")
+        raise SystemExit(subprocess.run(["setup", "recolor", *argv[1:]]).returncode)
     elif cmd == "icons":
         # Force the icon index to be rebuilt — after installing new apps or
         # changing the icon theme by hand.

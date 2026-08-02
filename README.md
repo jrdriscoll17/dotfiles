@@ -123,13 +123,27 @@ from upstream in three steps:
    [Colloid-gtk-theme](https://github.com/vinceliuice/Colloid-gtk-theme) and
    runs its `install.sh`, deriving the flags from each palette's theme name
    (`Colloid-Green-Dark-Everforest` → `-t green -c dark --tweaks everforest`).
-3. **Per-palette derive** — `recolor.py <base> <accent> <name>` for each
-   palette, in its own accent colour.
+3. **Per-palette derive** — the recolour step, for each palette, in its own
+   accent colour.
 
-Only the first step needs upstream: `recolor.py` reads a base's accent back off
+Only the first step needs upstream: the recolour reads a base's accent back off
 the installed theme, so any build can seed the next one and the original does
 not have to stay on disk. That is why this machine has no upstream base left —
 the palettes were derived from each other.
+
+Step 3 is also available on its own, and is what `theme recolor` now runs:
+
+```sh
+setup recolor <base-variant> <#hex> <name>
+setup recolor Pistachio '#7fd8e8' IceBlue
+```
+
+This was `recolor.py`, alongside `theme.py`. It moved into the setup tool so
+everything that installs or rebuilds these themes lives in one place, and so
+the GTK2 PNG recolouring no longer depends on PIL being importable — the
+Python version skipped it silently when it wasn't. The port is verified
+equivalent: for the same base, colour and name it produces a byte-identical
+icon set (25,501 files) and pixel-identical GTK assets.
 
 Missing assets do not error, they just leave an unstyled desktop, so `setup`
 also reports them under system checks.
