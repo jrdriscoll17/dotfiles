@@ -26,7 +26,7 @@ contents mirror paths relative to `$HOME`.
 ## Install
 
 ```sh
-git clone <this-repo> ~/dotfiles
+git clone git@github.com:jrdriscoll17/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 ./install.sh core       # portable set — safe on any host
 ./install.sh desktop    # everything, for the Hyprland box
@@ -50,7 +50,7 @@ Kept in a separate repo to keep this one small (they were ~41M). `theme.py`
 looks for them at `~/.config/hypr/wallpapers`, which is a symlink:
 
 ```sh
-git clone <wallpapers-repo> ~/wallpapers
+git clone git@github.com:jrdriscoll17/wallpapers.git ~/wallpapers
 ln -sfn ~/wallpapers ~/.config/hypr/wallpapers
 ```
 
