@@ -87,7 +87,7 @@ keep `colors.comment` well clear of `colors.fgFaint` in new themes.
 ## GTK, Qt, and icons
 
 The GTK themes and icons are recoloured builds of rtl88's, made by
-`theme recolor <base-variant> <#hex> <name>` (recolor.py) so each theme's app
+`theme recolor <base-variant> <#hex> <name>` so each theme's app
 chrome matches its palette accent exactly rather than approximating it with a
 stock variant:
 

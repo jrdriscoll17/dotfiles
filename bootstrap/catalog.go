@@ -108,13 +108,13 @@ func catalog() []Component {
 			Desc:    "GTK/Qt/Kvantum theming — required by kitty's include",
 			Default: true,
 			Packages: []string{
-				"python", "glib2", "kvantum", "qt5ct", "qt6ct", "gtk3", "gtk4",
+				"glib2", "kvantum", "qt5ct", "qt6ct", "gtk3", "gtk4",
 			},
-			// theme.py's KVANTUM_BASE points at this theme's SVG and copies it
+			// kvantumBase points at this theme's SVG, which renderQt copies
 			// per palette; render_qt silently no-ops without it.
 			AUR: []string{"kvantum-theme-nordic-git"},
 			Paths: []string{
-				".config/theme", ".local/bin/theme",
+				".config/theme",
 				".config/gtk-3.0", ".config/gtk-4.0", ".gtkrc-2.0",
 				".config/qt5ct", ".config/qt6ct", ".config/mimeapps.list",
 			},
@@ -162,7 +162,7 @@ func catalog() []Component {
 		{
 			Key:     "wallpapers",
 			Name:    "Wallpapers",
-			Desc:    "clone the wallpapers repo and link it where theme.py looks",
+			Desc:    "clone the wallpapers repo and link it where the switcher looks",
 			Default: true,
 			Post: []Step{
 				{Name: "clone + link wallpapers", Check: wallpapersLinked, Run: linkWallpapers},

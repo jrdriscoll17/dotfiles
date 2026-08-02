@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -44,9 +45,19 @@ const (
 )
 
 func main() {
+	// Multi-call binary: installed as ~/.local/bin/setup with a `theme` symlink
+	// beside it. Invoked through that name it is the theme switcher, so the
+	// renderers, the palettes and the installer that builds their assets all
+	// ship as one binary.
+	if filepath.Base(os.Args[0]) == "theme" {
+		themeExit(ThemeMain(os.Args[1:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "theme" {
+		themeExit(ThemeMain(os.Args[2:]))
+	}
+
 	// `setup recolor <base> <#hex> <name>` builds a Material-Black + Suru-GLOW
-	// pair without going near the TUI, so it can be scripted and so `theme
-	// recolor` can hand off to it.
+	// pair without going near the TUI, so it can be scripted.
 	if len(os.Args) > 1 && os.Args[1] == "recolor" {
 		if len(os.Args) != 5 {
 			fmt.Fprintln(os.Stderr, "usage: setup recolor <base-variant> <#hex> <name>")
@@ -68,6 +79,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, errStyle.Render("error: "+err.Error()))
 		os.Exit(1)
 	}
+}
+
+// themeExit ends the process after a `theme` invocation, mirroring how the
+// Python CLI reported failures.
+func themeExit(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "theme: "+err.Error())
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
 
 func runSetup() error {

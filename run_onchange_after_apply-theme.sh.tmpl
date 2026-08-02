@@ -1,28 +1,33 @@
 #!/bin/sh
 # Rebuild the theme switcher's output after `chezmoi apply`.
 #
-# Everything ~/.config/theme generates is listed in .chezmoiignore, so it never
+# Everything the switcher generates is listed in .chezmoiignore, so it never
 # enters git and never produces a diff when you switch themes. This script is
 # what makes that safe: it regenerates the lot, so a fresh machine still ends up
 # with a complete config. kitty.conf has `include theme.conf` and errors outright
 # if that file is missing, so this is not optional on a new install.
 #
 # run_onchange_ means this runs when the hashes below change — on first install,
-# and whenever the switcher or a palette is edited. The re-render is also what
-# heals the files theme.py mutates in place but chezmoi manages (gtk settings.ini,
-# qt5ct/qt6ct.conf, btop.conf): apply may reset a theme-owned line, and this puts
-# it back.
+# and whenever the renderers or a palette are edited. The re-render is also what
+# heals the files the switcher mutates in place but chezmoi manages (gtk
+# settings.ini, qt5ct/qt6ct.conf, btop.conf): apply may reset a theme-owned line,
+# and this puts it back.
 #
-# theme.py:  {{ include "dot_config/theme/executable_theme.py" | sha256sum }}
+# renderers: {{ include "bootstrap/render.go" | sha256sum }}
+# palettes:  {{ include "bootstrap/palette.go" | sha256sum }}
 # evergreen: {{ include "dot_config/theme/themes/evergreen.json" | sha256sum }}
 # ice-blue:  {{ include "dot_config/theme/themes/ice-blue.json" | sha256sum }}
 # onedark:   {{ include "dot_config/theme/themes/onedark.json" | sha256sum }}
 
 set -eu
 
-[ -f "$HOME/.config/theme/theme.py" ] || exit 0
+# The switcher is a Go binary now, built from ~/dotfiles/bootstrap by
+# `make install`. On a machine that has not been through `setup` yet it simply
+# is not there — setup runs the render itself as one of its bootstrap steps, so
+# skipping here is correct rather than a failure.
+command -v theme >/dev/null 2>&1 || exit 0
 
-# `apply` with no theme name re-renders the active one; theme.py's current()
-# falls back to the first palette when ~/.config/theme/current is absent, which
-# is the case on a machine that has never run this.
-python3 "$HOME/.config/theme/theme.py" apply --quiet
+# `apply` with no theme name re-renders the active one; it falls back to the
+# first palette when ~/.config/theme/current is absent, which is the case on a
+# machine that has never run this.
+theme apply --quiet

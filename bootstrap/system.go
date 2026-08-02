@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -232,7 +231,7 @@ func installDoom() error {
 func themeRendered() bool { return exists(inHome(".config/kitty/theme.conf")) }
 
 func applyTheme() error {
-	return run("python3", inHome(".config/theme/theme.py"), "apply", "--quiet")
+	return applyThemeNamed(currentTheme(), true)
 }
 
 func wallpapersLinked() bool {
@@ -267,35 +266,23 @@ type Check struct {
 	Fix  string
 }
 
-// palette is the part of a theme JSON that names external assets.
-type palette struct {
-	Name   string `json:"name"`
-	Colors struct {
-		Accent string `json:"accent"`
-	} `json:"colors"`
-	GTK struct {
-		Theme string `json:"theme"`
-		Icons string `json:"icons"`
-		GTK4  string `json:"gtk4"`
-	} `json:"gtk"`
+// variantOf is the stem the recolour builds against: the palette's GTK theme
+// "Material-Black-Evergreen" and icon set "MB-Evergreen-Suru-GLOW" share
+// "Evergreen".
+func variantOf(t *Theme) string {
+	return strings.TrimPrefix(t.GTK.Theme, "Material-Black-")
 }
 
-// variant is the suffix recolor.py builds against: the palette's GTK theme
-// "Material-Black-Evergreen" and icon set "MB-Evergreen-Suru-GLOW" share the
-// stem "Evergreen".
-func (p palette) variant() string {
-	return strings.TrimPrefix(p.GTK.Theme, "Material-Black-")
-}
-
-func (p palette) built() bool {
-	return exists(inHome(".themes/"+p.GTK.Theme)) &&
-		exists(inHome(".local/share/icons/"+p.GTK.Icons))
+// assetsBuilt reports whether a palette's GTK theme and icon set are on disk.
+func assetsBuilt(t *Theme) bool {
+	return exists(inHome(".themes/"+t.GTK.Theme)) &&
+		exists(inHome(".local/share/icons/"+t.GTK.Icons))
 }
 
 const (
 	// The Material-Black GTK themes and their matching Suru-GLOW icon sets
 	// both live on this one branch, so a single sparse clone gets a complete
-	// base pair. Blueberry is an arbitrary pick — recolor.py reads the accent
+	// base pair. Blueberry is an arbitrary pick — the recolour reads the accent
 	// back off whatever base it is given.
 	mbRepo   = "https://github.com/rtlewis88/rtl88-Themes"
 	mbBranch = "material-black-COLORS"
@@ -305,38 +292,29 @@ const (
 	colloidRepo = "https://github.com/vinceliuice/Colloid-gtk-theme"
 )
 
-// palettes reads every theme definition, ignoring any that will not parse.
-func palettes() []palette {
-	dir := inHome(".config/theme/themes")
-	entries, err := os.ReadDir(dir)
+// palettes reads every theme definition, skipping any that will not parse.
+func palettes() []*Theme {
+	names, err := themeNames()
 	if err != nil {
 		return nil
 	}
-	var out []palette
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var p palette
-		if json.Unmarshal(raw, &p) == nil {
-			out = append(out, p)
+	var out []*Theme
+	for _, n := range names {
+		if t, err := loadTheme(n); err == nil {
+			out = append(out, t)
 		}
 	}
 	return out
 }
 
 // themeBaseInstalled reports whether any Material-Black + Suru-GLOW pair is
-// present. recolor.py can derive from any of them, including one of its own
+// present. The recolour can derive from any of them, including one of its own
 // earlier outputs, so the upstream base does not have to be the one on disk.
 func themeBaseInstalled() bool { return installedBase() != "" }
 
 // installThemeBase sparse-clones just the one colour pair (~150M) rather than
 // the whole ~850M repo, and drops the version suffix upstream uses so the
-// directory name is the "Material-Black-<base>" that recolor.py looks for.
+// directory name is the "Material-Black-<base>" that readBase looks for.
 func installThemeBase() error {
 	tmp, err := os.MkdirTemp("", "mbtheme")
 	if err != nil {
@@ -427,7 +405,7 @@ func installColloid() error {
 
 func paletteThemesBuilt() bool {
 	for _, p := range palettes() {
-		if p.GTK.Theme != "" && !p.built() {
+		if p.GTK.Theme != "" && !assetsBuilt(p) {
 			return false
 		}
 	}
@@ -443,23 +421,23 @@ func buildPaletteThemes() error {
 		return errors.New("no Material-Black + Suru-GLOW pair to derive from")
 	}
 	for _, p := range palettes() {
-		if p.GTK.Theme == "" || p.built() {
+		if p.GTK.Theme == "" || assetsBuilt(p) {
 			continue
 		}
-		if p.Colors.Accent == "" {
+		if p.c("accent") == "" {
 			fmt.Printf("    skipping %s: no accent colour in the palette\n", p.Name)
 			continue
 		}
-		fmt.Printf("    %s (%s from %s)\n", p.variant(), p.Colors.Accent, base)
-		if err := Recolor(base, p.Colors.Accent, p.variant()); err != nil {
-			return fmt.Errorf("recolouring %s: %w", p.variant(), err)
+		fmt.Printf("    %s (%s from %s)\n", variantOf(p), p.c("accent"), base)
+		if err := Recolor(base, p.c("accent"), variantOf(p)); err != nil {
+			return fmt.Errorf("recolouring %s: %w", variantOf(p), err)
 		}
 	}
 	return nil
 }
 
 // installedBase returns the stem of any Material-Black + Suru-GLOW pair on
-// disk, which recolor.py can use as a source.
+// disk, which the recolour can use as a source.
 func installedBase() string {
 	entries, err := os.ReadDir(inHome(".themes"))
 	if err != nil {
@@ -479,32 +457,14 @@ func installedBase() string {
 }
 
 // themeAssetChecks verifies the GTK and icon themes the palettes point at.
-// These are the one part of the setup nothing reproduces: recolor.py derives
+// These are the one part of the setup nothing reproduces: the recolour derives
 // Material-Black-<name> and MB-<name>-Suru-GLOW from an existing pair, the
 // Colloid gtk4 themes are installed by hand, and none of it is packaged or in
 // the repo. Missing assets do not error — you just get an unstyled desktop —
 // so they are worth reporting explicitly.
 func themeAssetChecks() []Check {
-	dir := inHome(".config/theme/themes")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-
 	var checks []Check
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var p palette
-		if json.Unmarshal(raw, &p) != nil {
-			continue
-		}
-
+	for _, p := range palettes() {
 		var gone []string
 		for _, a := range []struct{ path, name string }{
 			{inHome(".themes/" + p.GTK.Theme), p.GTK.Theme},
@@ -516,9 +476,8 @@ func themeAssetChecks() []Check {
 			}
 		}
 
-		name := strings.TrimSuffix(e.Name(), ".json")
 		checks = append(checks, Check{
-			Name: "theme assets for " + name,
+			Name: "theme assets for " + p.Name,
 			OK:   len(gone) == 0,
 			Fix: fmt.Sprintf("missing: %s — re-run setup with the Theme switcher "+
 				"component selected; it clones the upstream base and rebuilds these",

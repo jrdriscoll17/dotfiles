@@ -5,7 +5,7 @@
 # run_onchange_after_apply-theme.sh script on every `chezmoi apply`, so a fresh
 # machine still ends up with a complete, working config.
 
-# -- theme switcher output (see theme.py RENDERERS) --------------------------
+# -- theme switcher output (see bootstrap/render.go) -------------------------
 .config/kitty/theme.conf
 .config/alacritty/colors.toml
 .config/nvim/lua/theme.lua
@@ -22,7 +22,7 @@
 # active theme name; managing it would flip the theme on every apply
 .config/theme/current
 .config/theme/__pycache__/
-# symlinks into the generated ~/.themes/ tree, recreated by theme.py render_gtk
+# symlinks into the generated ~/.themes/ tree, recreated by renderGTK
 .config/gtk-4.0/gtk.css
 .config/gtk-4.0/gtk-dark.css
 # symlink to the separate wallpapers repo

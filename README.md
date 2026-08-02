@@ -16,6 +16,11 @@ cd ~/dotfiles/bootstrap && make install
 setup
 ```
 
+`make install` produces `~/.local/bin/setup` and a `theme` symlink beside it.
+They are the same binary — `main()` dispatches on `argv[0]` — so the installer,
+the theme switcher and the theme-asset builder ship as one artefact. Quickshell's
+`ThemeState.qml` execs `theme data`, so that symlink needs to stay on PATH.
+
 `setup` is the interactive installer (`bootstrap/`). It detects the host, lets
 you pick components, installs their packages, hands the configs to chezmoi, and
 runs the bootstrap that nothing else tracks — tpm, fisher, lazy.nvim, Doom, the
@@ -97,7 +102,7 @@ which is what keeps a fresh machine complete — `kitty.conf` has
 whenever the switcher or a palette changes, tracked by content hashes embedded
 in its comments.
 
-A few files are *mutated* in place by `theme.py` rather than generated whole
+A few files are *mutated* in place by the switcher rather than generated whole
 (`gtk-3.0/settings.ini`, `qt5ct/qt6ct.conf`, `btop.conf`), so they hold real
 config and stay tracked. `chezmoi apply` may reset a theme-owned line in them;
 the post-apply script immediately puts it back.
@@ -105,6 +110,33 @@ the post-apply script immediately puts it back.
 Machine-local state is ignored too — `fish_variables`, `theme/current`, the
 GTK4 css symlinks into the generated `~/.themes/` tree, and the wallpapers
 symlink. See `.chezmoiignore`, which explains each entry.
+
+## The theme switcher
+
+`theme` is a Go binary (`bootstrap/render.go`, `palette.go`, `themecmd.go`),
+ported from what used to be `~/.config/theme/theme.py`. What remains under
+`~/.config/theme` is data: the palette JSONs and a README.
+
+```sh
+theme list           # show the themes and which one is live
+theme set <name>     # switch
+theme apply          # re-render the current theme (run at Hyprland start)
+theme next           # cycle
+theme icons          # rebuild the icon index after installing apps
+theme data           # JSON for the Quickshell picker
+```
+
+The ten renderers emit byte-for-byte what the Python ones did — verified per
+theme against captured output, 19 of 20 generated files identical across all
+three palettes.
+
+The exception is `quickshell/generated/icons.json`, deliberately. Python's
+`size_rank` stripped the `@2x` suffix, which tied `32x32` against `32x32@2x`
+and left the winner to whatever order the filesystem returned directories in —
+so the index was never reproducible across machines. Ranking by *effective*
+pixels (`32x32@2x` is 64px artwork) is deterministic and is what "bigger wins"
+was always meant to say. Same 24,660 icon names; 673 now resolve to a
+higher-resolution source and none to a lower one.
 
 ## GTK and icon theme assets
 
@@ -118,7 +150,7 @@ from upstream in three steps:
    `material-black-COLORS`, which carries the GTK themes *and* their matching
    Suru-GLOW icon sets. Only one colour is checked out (~150M rather than the
    repo's ~850M) and installed as `Material-Black-Blueberry`, dropping the
-   version suffix upstream uses so `recolor.py` can find it.
+   version suffix upstream uses so the recolour can find it.
 2. **Colloid gtk4** — clones
    [Colloid-gtk-theme](https://github.com/vinceliuice/Colloid-gtk-theme) and
    runs its `install.sh`, deriving the flags from each palette's theme name
@@ -138,12 +170,12 @@ setup recolor <base-variant> <#hex> <name>
 setup recolor Pistachio '#7fd8e8' IceBlue
 ```
 
-This was `recolor.py`, alongside `theme.py`. It moved into the setup tool so
-everything that installs or rebuilds these themes lives in one place, and so
-the GTK2 PNG recolouring no longer depends on PIL being importable — the
-Python version skipped it silently when it wasn't. The port is verified
-equivalent: for the same base, colour and name it produces a byte-identical
-icon set (25,501 files) and pixel-identical GTK assets.
+This was `recolor.py`, alongside `theme.py`. Both are now Go, in the same
+binary, so the whole switcher is one artefact with no interpreter. The GTK2 PNG
+recolouring no longer depends on PIL being importable either — the Python
+version skipped it silently when it wasn't. The port is verified equivalent:
+for the same base, colour and name it produces a byte-identical icon set
+(25,501 files) and pixel-identical GTK assets.
 
 Missing assets do not error, they just leave an unstyled desktop, so `setup`
 also reports them under system checks.
@@ -152,8 +184,8 @@ also reports them under system checks.
 
 Every config reload makes kitty 0.48.1 re-`mmap` all four font faces without
 freeing the old ones (~0.7 MB PSS each; RSS overstates it wildly because the
-same font pages are counted once per mapping). `theme.py` reloads kitty twice
+same font pages are counted once per mapping). The switcher reloads kitty twice
 per apply: once because kitty's own config watcher sees the new `theme.conf`,
-and again from the explicit `pkill -USR1 -x kitty` at `theme.py:677`. The
-`pkill` is redundant on this kitty version — dropping it would halve the leak.
-Left as-is deliberately.
+and again from the explicit `pkill -USR1 -x kitty` in `reloadAll`. The `pkill`
+is redundant on this kitty version — dropping it would halve the leak. Left
+as-is deliberately.
