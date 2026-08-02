@@ -618,6 +618,10 @@ def set_wallpaper(path: Path) -> bool:
     image is warm.
     """
     target = str(path)
+    # hyprpaper reports the canonical path in `listactive`, and the wallpaper
+    # dir is a symlink (~/.config/hypr/wallpapers -> the wallpapers repo), so
+    # compare resolved paths — a literal match never succeeds through a link.
+    expected = os.path.realpath(target)
 
     for attempt in range(24):
         # Re-issue only at the start and once more if it's clearly stuck: each
@@ -630,7 +634,7 @@ def set_wallpaper(path: Path) -> bool:
         # Lines look like "DP-1: /path/to.jpg"; hyprctl's own diagnostics
         # ("error: can't send: ...") also contain a colon, so match the shape.
         paths = re.findall(r"^\S+: (/.*)$", active.stdout if active else "", re.MULTILINE)
-        if paths and all(p.strip() == target for p in paths):
+        if paths and all(os.path.realpath(p.strip()) == expected for p in paths):
             return True
 
         # No monitors listed at all means hyprpaper isn't up — it starts
