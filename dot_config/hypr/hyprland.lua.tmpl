@@ -15,33 +15,38 @@
 -- default: at 1 a HiDPI panel renders everything unreadably small. Change it
 -- here if this ever runs on a laptop with a different panel.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1.5 })
-{{- else if eq .hostname "spectr" }}
--- Work desktop: three 4K AOC panels, none of which can do more than 60Hz
--- (2x U2790B + 1x U27B3A — 3840x2160@60 is the top mode each one advertises).
--- Asking for @120 here is not harmless: Hyprland rejects the mode and falls
--- back, so the layout came up at whatever it picked rather than what was
--- written. The U27B3A sits in the middle, between the two U2790Bs.
+{{- else }}
+-- The layout itself is not in this repo. It is hardware — different on every
+-- machine — and the repo is for the things that are meant to be identical.
+-- `hydra monitors` asks Hyprland what is actually connected and writes
+-- ~/.config/hypr/monitors.lua; see hydra's internal/setup/monitors.go for why
+-- guessing it here went wrong (a hardcoded @120 on a 60Hz panel is not an
+-- error — Hyprland just quietly uses something else).
 --
--- Workspace pinning stays positional, matching the other desktop: 2 = left
--- screen, 1 = middle, 3 = right. Only the outputs behind those positions
--- differ. There is no HDMI-A-1 on this machine.
-hl.monitor({ output = "DP-2", mode = "3840x2160@60", position = "0x0", scale = 2 })
-hl.monitor({ output = "DP-3", mode = "3840x2160@60", position = "1920x0", scale = 2 })
-hl.monitor({ output = "DP-1", mode = "3840x2160@60", position = "3840x0", scale = 2 })
+-- Loaded only if it is there. A machine that has never run `hydra monitors`
+-- gets Hyprland's own automatic placement, which is plain rather than another
+-- machine's hardware pretending to be this one's.
+local monitors = os.getenv("HOME") .. "/.config/hypr/monitors.lua"
+if loadfile(monitors) then
+	dofile(monitors)
+end
 
+-- Which workspace lands on which screen is preference, not hardware, so it
+-- does stay here — but the mapping is from workspace to output name, and the
+-- same name is a different screen on each desk. The intent is positional on
+-- both: 2 on the left screen, 1 in the middle, 3 on the right.
+{{- if eq .hostname "spectr" }}
+-- Work desk, left to right: DP-2, DP-3, DP-1.
 hl.workspace_rule({ workspace = "2", monitor = "DP-2" })
 hl.workspace_rule({ workspace = "1", monitor = "DP-3" })
 hl.workspace_rule({ workspace = "3", monitor = "DP-1" })
 {{- else }}
-hl.monitor({ output = "DP-2", mode = "3840x2160@120", position = "0x0", scale = 2 })
-hl.monitor({ output = "DP-1", mode = "3840x2160@120", position = "1920x0", scale = 2 })
-hl.monitor({ output = "DP-3", mode = "3840x2160@120", position = "3840x0", scale = 2 })
-hl.monitor({ output = "HDMI-A-1", mode = "3840x2160@120", position = "-1920x0", scale = 2 })
-
+-- Home desk, left to right: HDMI-A-1, DP-2, DP-1, DP-3.
 hl.workspace_rule({ workspace = "2", monitor = "DP-2" })
 hl.workspace_rule({ workspace = "1", monitor = "DP-1" })
 hl.workspace_rule({ workspace = "3", monitor = "DP-3" })
 hl.workspace_rule({ workspace = "10", monitor = "HDMI-A-1" })
+{{- end }}
 {{- end }}
 
 ---------------------

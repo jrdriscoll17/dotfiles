@@ -17,6 +17,9 @@
 .config/Kvantum/
 
 # -- machine-local state -----------------------------------------------------
+# this machine's monitor layout, written by `hydra monitors`. .config/hypr is a
+# directory the repo owns outright, so without this it comes back as a stray.
+.config/hypr/monitors.lua
 # fish universal variables
 .config/fish/fish_variables
 # active theme name; managing it would flip the theme on every apply
