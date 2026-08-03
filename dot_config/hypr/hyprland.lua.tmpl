@@ -15,6 +15,23 @@
 -- default: at 1 a HiDPI panel renders everything unreadably small. Change it
 -- here if this ever runs on a laptop with a different panel.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1.5 })
+{{- else if eq .hostname "spectr" }}
+-- Work desktop: three 4K AOC panels, none of which can do more than 60Hz
+-- (2x U2790B + 1x U27B3A — 3840x2160@60 is the top mode each one advertises).
+-- Asking for @120 here is not harmless: Hyprland rejects the mode and falls
+-- back, so the layout came up at whatever it picked rather than what was
+-- written. The U27B3A sits in the middle, between the two U2790Bs.
+--
+-- Workspace pinning stays positional, matching the other desktop: 2 = left
+-- screen, 1 = middle, 3 = right. Only the outputs behind those positions
+-- differ. There is no HDMI-A-1 on this machine.
+hl.monitor({ output = "DP-2", mode = "3840x2160@60", position = "0x0", scale = 2 })
+hl.monitor({ output = "DP-3", mode = "3840x2160@60", position = "1920x0", scale = 2 })
+hl.monitor({ output = "DP-1", mode = "3840x2160@60", position = "3840x0", scale = 2 })
+
+hl.workspace_rule({ workspace = "2", monitor = "DP-2" })
+hl.workspace_rule({ workspace = "1", monitor = "DP-3" })
+hl.workspace_rule({ workspace = "3", monitor = "DP-1" })
 {{- else }}
 hl.monitor({ output = "DP-2", mode = "3840x2160@120", position = "0x0", scale = 2 })
 hl.monitor({ output = "DP-1", mode = "3840x2160@120", position = "1920x0", scale = 2 })
@@ -152,6 +169,7 @@ hl.animation({ leaf = "workspacesOut", enabled = true, speed = 1.94, bezier = "a
 -------------------
 ---- GAME MODE ----
 -------------------
+{{- if ne .hostname "spectr" }}
 -- Toggle: middle monitor (DP-1) only @ 240Hz + HDR, side monitors off.
 -- Self-healing: reads current state in-process via hl.get_monitor.
 -- NOTE: must NOT shell out to `hyprctl` here — a synchronous IPC call from
@@ -213,6 +231,11 @@ local function toggle_game_mode(hdr)
 		hl.notification.create({ text = "🎮 Game Mode ON — DP-1 @ 240Hz · SDR · sides off", timeout = 4000 })
 	end
 end
+{{- else }}
+-- Not emitted on the work desktop: game mode exists to drive one 240Hz HDR
+-- panel and blank the sides. None of the three 60Hz AOCs here can do that, and
+-- running it would blank two screens and re-apply the other desktop's layout.
+{{- end }}
 
 ---------------------
 ---- KEYBINDINGS ----
@@ -237,6 +260,7 @@ hl.bind(mainMod .. " + SHIFT + Q", hl.dsp.exit())
 hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }))
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "toggle" }))
 
+{{- if ne .hostname "spectr" }}
 -- Toggle Game Mode (HDR), and SHIFT variant without HDR
 hl.bind(mainMod .. " + G", function()
 	toggle_game_mode(true)
@@ -244,6 +268,7 @@ end)
 hl.bind(mainMod .. " + SHIFT + G", function()
 	toggle_game_mode(false)
 end)
+{{- end }}
 
 -- Move focus with mainMod + arrow keys
 hl.bind(mainMod .. " + left", hl.dsp.focus({ direction = "left" }))
